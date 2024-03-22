@@ -31,7 +31,11 @@ public class SerialSessionController : SessionController
     
     public SerialSessionController(ISessionControllerListener listener) : base(listener)
     {
-        _serialPort = new SerialPort("COM1", 9600, Parity.None, 8, StopBits.One);
+        const string port = "COM1";
+        _serialPort = new SerialPort(port, 9600, Parity.None, 8, StopBits.One);    if (_serialPort.IsOpen)
+        {
+            throw new InvalidOperationException($"The COM Port {port} is already open.");
+        }
         _serialPort.DataReceived += SerialPort_DataReceived;
         _serialPort.Open();
     }
@@ -40,8 +44,6 @@ public class SerialSessionController : SessionController
     {
         Console.WriteLine($"In {nameof(SerialSessionController)}.{nameof(StateChanged)} from {previousState} to {newState}");
         _state = newState;
-
-
     }
 
     private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
@@ -118,6 +120,7 @@ public class SerialSessionController : SessionController
 
     public override void Dispose()
     {
+        _serialPort.DataReceived -= SerialPort_DataReceived;
         _serialPort?.Dispose();
     }
 }
