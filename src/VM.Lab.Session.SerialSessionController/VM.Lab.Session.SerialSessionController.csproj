@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <Copyright>Videometer A/S</Copyright>
+        <Authors>Videometer</Authors>
+        <OutputType>Library</OutputType>
+        <SolutionDir Condition="'$(SolutionDir)' == ''">$(MSBuildThisFileDirectory)</SolutionDir>
+        <Version>0.0.0.0</Version>
+        <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>disable</Nullable>
+        <Company>Videometer A/S</Company>
+        <LangVersion>12</LangVersion>
+    </PropertyGroup>
+    <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+        <DocumentationFile>bin\Release\VM.Lab.Session.SerialSessionControllor.xml</DocumentationFile>
+        <DebugSymbols>true</DebugSymbols>
+        <DebugType>pdbonly</DebugType>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+    <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+        <DebugType>full</DebugType>
+    </PropertyGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\VM.Lab.Interfaces.Session\VM.Lab.Interfaces.Session.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+      <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+    </ItemGroup>
+</Project>

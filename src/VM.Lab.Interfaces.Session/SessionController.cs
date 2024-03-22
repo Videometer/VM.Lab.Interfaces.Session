@@ -1,7 +1,7 @@
 ﻿namespace VM.Lab.Interfaces.Session
 {
 	/// <summary>Implement this to be an agent that controls sessions</summary>
-	public abstract class SessionController
+	public abstract class SessionController : IDisposable
 	{
 		/// <summary>Implementer of session control commands</summary>
 		protected readonly ISessionControllerListener _listener;
@@ -29,5 +29,7 @@
 		/// <summary>Reads the barcode if supported</summary>
 		/// <returns>Read barcode</returns>
 		public abstract string ReadBarcode();
+		
+		public abstract void Dispose();
 	}
 }
