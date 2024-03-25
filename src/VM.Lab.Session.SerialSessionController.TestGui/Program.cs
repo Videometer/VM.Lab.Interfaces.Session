@@ -5,28 +5,29 @@ using VM.Lab.Session.SerialSessionController.TestGui;
 Console.WriteLine("This program simulated the VideometerLab Session application");
 Console.WriteLine("This program is used to send commands corresponding to the actions that happen when the user clicks buttons in the session GUI.");
 
-var controller = new SerialSessionController(new DummySessionControllerListener());
-bool _firstCapture = true;
+bool firstCapture = true;
+var listener = new DummySessionControllerListener();
+var controller = new SerialSessionController(listener);
+listener.CaptureCalled += (_, _) => 
+{
+    CaptureCalled();
+};
+
+// Simulate that the session window have been opened
+controller.StateChanged(SessionState.NONE, SessionState.IDLE_SINGLE_FRAME); 
 
 while (true)
 {
     Console.WriteLine("Enter command");
     var input = Console.ReadLine();
-    Console.WriteLine("Input was: {input}");
+    Console.WriteLine($"Input was: {input}");
     switch (input)
     {
         case "capture":
-            if (_firstCapture)
-            {
-                _firstCapture = false;
-                controller.StateChanged(SessionState.NONE, SessionState.IDLE_SINGLE_FRAME);
-            }
-
-            controller.StateChanged(SessionState.IDLE_SINGLE_FRAME, SessionState.CAPTURE_SINGLE_FRAME);
-            controller.StateChanged(SessionState.CAPTURE_SINGLE_FRAME, SessionState.WAIT_NEXT_SINGLE_FRAME);
+            CaptureCalled();
             break;
         case "new":
-            _firstCapture = true;
+            firstCapture = true;
             controller.StateChanged(SessionState.WAIT_NEXT_SINGLE_FRAME, SessionState.IDLE_SINGLE_FRAME);
             break;
         case "exit":
@@ -36,3 +37,15 @@ while (true)
             break;
     }
 }
+
+void CaptureCalled()
+{
+    if (firstCapture)
+    {
+        firstCapture = false;
+        controller.StateChanged(SessionState.NONE, SessionState.IDLE_SINGLE_FRAME);
+    }
+    controller.StateChanged(SessionState.IDLE_SINGLE_FRAME, SessionState.CAPTURE_SINGLE_FRAME);
+    controller.StateChanged(SessionState.CAPTURE_SINGLE_FRAME, SessionState.WAIT_NEXT_SINGLE_FRAME);
+}
+

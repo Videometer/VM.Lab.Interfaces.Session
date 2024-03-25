@@ -13,10 +13,8 @@ public class SerialSessionController : SessionController
     private const string FinishKeyWord = "Finish";
     private const string NewKeyWord = "New";
     private const string CheckConnectionKeyWord = "CheckConnection";
-    private const string GetStateKeyWord = "GetState";
-    
-
-    // TODO: Get "sphere position" and "Analysis OK" / Is the read line shown?
+    private const string ReadyForNextSampleKeyWord = "ReadyForNextSample";
+    private readonly AutoResetEvent _analysisComplete = new AutoResetEvent(false); 
     
     private readonly string[] _keyWords =
     {
@@ -25,61 +23,82 @@ public class SerialSessionController : SessionController
         FinishKeyWord,
         NewKeyWord,
         CheckConnectionKeyWord,
-        GetStateKeyWord
+        ReadyForNextSampleKeyWord,
     };
-    
     
     public SerialSessionController(ISessionControllerListener listener) : base(listener)
     {
-        const string port = "COM1";
-        _serialPort = new SerialPort(port, 9600, Parity.None, 8, StopBits.One);    if (_serialPort.IsOpen)
+        const string port = "COM2";
+        _serialPort = new SerialPort(port, 9600, Parity.None, 8, StopBits.One);
+        if (_serialPort.IsOpen)
         {
             throw new InvalidOperationException($"The COM Port {port} is already open.");
         }
         _serialPort.DataReceived += SerialPort_DataReceived;
         _serialPort.Open();
+        
+        _serialPort.DiscardInBuffer();
+        _serialPort.DiscardOutBuffer();
     }
 
     public override void StateChanged(SessionState previousState, SessionState newState)
     {
         Console.WriteLine($"In {nameof(SerialSessionController)}.{nameof(StateChanged)} from {previousState} to {newState}");
         _state = newState;
+        
+        if (newState == SessionState.WAIT_NEXT_SINGLE_FRAME)
+        {
+            _analysisComplete.Set();
+        }
     }
 
     private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
     {
         string data = _serialPort.ReadLine();
         Console.WriteLine($"{nameof(SerialSessionController)} received: " + data);
-
         var parts = data.Split(Separator);
-        // TODO: Add handling of data that do not contains a ";"
-
         int expectedParts;
         switch (parts[0])
         {
             case CaptureKeyWord:
-                expectedParts = 4;
+                expectedParts = 5;
                 break;
             case PauseKeyWord:
             case FinishKeyWord:
             case NewKeyWord:
             case CheckConnectionKeyWord:
+            case ReadyForNextSampleKeyWord:
                 expectedParts = 1;
                 break;
             default:
+                var receivedString = data.Length == 0
+                    ? "Received an empty string."
+                    : $"Received {data}.";
                 throw new ArgumentException(
                     $"The arguments passed to the {nameof(SerialSessionController)} are invalid. " +
-                    $"The first word must be either {string.Join(", ", _keyWords)}. " +
-                    $"Received: {data}");
+                    $"The first word must be either {string.Join(", ", _keyWords)}. {receivedString}");
         }
 
-        CheckNumberOfArguments(parts.Length, expectedParts, data);
+        if (parts.Length != expectedParts)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedParts} arguments seperated by {Separator}, but received {parts.Length}. Received {data}");
+        }
        
         switch (parts[0])
         {
             case CaptureKeyWord:
-                bool suffixByTimestamp = parts[3] == "True";
+                if (parts[4] is not ("True" or "False"))
+                {
+                    throw new ArgumentException(
+                        $"Last parameter must be either \"True\" or \"False\", but was {parts[4]}");
+                }
+                bool suffixByTimestamp = parts[4] == "True";
                 _listener.Capture(parts[0], parts[1], parts[2], suffixByTimestamp);
+                _serialPort.WriteLine("CaptureOK");
+                WaitForAnalysisToComplete();
+                _serialPort.WriteLine("AnalysisDone");
+                Console.WriteLine($"{nameof(SerialSessionController)}: AnalysisDone");
                 break;
             case PauseKeyWord:
                 _listener.Pause();
@@ -93,8 +112,12 @@ public class SerialSessionController : SessionController
             case CheckConnectionKeyWord:
                 _serialPort.WriteLine("ConnectionOK");
                 break;
-            case GetStateKeyWord:
-                _serialPort.WriteLine(_state.ToString());
+            case ReadyForNextSampleKeyWord:
+                // TODO: Added check for sphere height
+                // TODO: Get "Analysis OK" / Is the read line shown?
+                // TODO: Added check for exception window open
+                var ready = _state == SessionState.IDLE_SINGLE_FRAME ? "True" : "False";
+                _serialPort.WriteLine(ready);
                 break;
             default:
                 throw new ArgumentException(
@@ -102,15 +125,12 @@ public class SerialSessionController : SessionController
         }
     }
 
-    private static void CheckNumberOfArguments(int partsReceived, int partsExpected, string data)
+    private void WaitForAnalysisToComplete()
     {
-        if (partsReceived != 4)
-        {
-            throw new ArgumentException(
-                $"Expected {partsExpected} arguments seperated by {Separator}, but received {partsReceived}. Received {data}");
-        }
+        // There is not timeout here as the timeout is handled on the Python side
+        _analysisComplete.WaitOne();
     }
-
+    
     public override bool HasBarcodeReader => false;
 
     public override string ReadBarcode()
