@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+    <metadata>
+        <id>VM.Lab.Interfaces.Session</id>
+        <version>$version$</version>
+        <title>VM.Lab.Interfaces.Session</title>
+        <authors>Videometer</authors>
+        <owners>Videometer</owners>
+        <requireLicenseAcceptance>false</requireLicenseAcceptance>
+        <description>Interfaces for Videometerlab session interaction</description>
+        <releaseNotes>Package Created</releaseNotes>
+        <tags>Videometerlab Session Interface</tags>
+    </metadata>
+    <files>
+		<!-- net 8.0 -->
+		<file src="VM.Lab.Interfaces.Session\bin\Release\net8.0\VM.Lab.Interfaces.Session.dll" target="lib\net8.0" />
+		<file src="VM.Lab.Interfaces.Session\bin\Release\net8.0\VM.Lab.Interfaces.Session.pdb" target="lib\net8.0" />
+		<file src="VM.Lab.Interfaces.Session\bin\Release\net8.0\VM.Lab.Interfaces.Session.xml" target="lib\net8.0" />
+		
+		<!-- netstandard 2.0 -->
+		<file src="VM.Lab.Interfaces.Session\bin\Release\netstandard2.0\VM.Lab.Interfaces.Session.dll" target="lib\netstandard2.0" />
+		<file src="VM.Lab.Interfaces.Session\bin\Release\netstandard2.0\VM.Lab.Interfaces.Session.pdb" target="lib\netstandard2.0" />
+		<file src="VM.Lab.Interfaces.Session\bin\Release\netstandard2.0\VM.Lab.Interfaces.Session.xml" target="lib\netstandard2.0" />
+	</files>
+</package>

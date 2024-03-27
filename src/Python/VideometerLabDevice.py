@@ -11,6 +11,8 @@ runRecipeTimeout = 15
 initializeRetries = 3
 # The time in seconds to wait in between trying to connect to the VideometerLab instrument and check for the "is ready" status
 secondsToWaitBetweenInitializeRetries = 5
+# The maximum number of times ot try and resend a command if the sending of the command fails or if the response is not the expected.
+sendCommandMaxRetries = 3
 
 class VideometerLabDevice(object):
     def __init__(self):
@@ -40,10 +42,10 @@ class VideometerLabDevice(object):
         while connectionOK == False and nFailes < initializeRetries:
             try:
                 # Check the connection to the VideometerLab instrument
-                self.SendCommand("CheckConnection", "ConnectionOK")
+                self.SendCommandWithRetry("CheckConnection", "ConnectionOK")
 
                 # Check that the VideometerLab instrument is ready for the next sample
-                self.SendCommand("ReadyForNextSample", "True")
+                self.SendCommandWithRetry("ReadyForNextSample", "True")
                 
                 connectionOK = True
             except:
@@ -70,9 +72,23 @@ class VideometerLabDevice(object):
             print(f"Failed to get expected response from command {command}. Expected {expectedResult}, but received {read}.")
             raise Exception(f"Failed to get expected response from command {command}. Expected {expectedResult}, but received {read}.")
 
+    def SendCommandWithRetry(self, command, expectedResult, maxAttempts=sendCommandMaxRetries):
+        attempt = 0
+        while attempt < maxAttempts:
+            try:
+                self.SendCommand(command, expectedResult)
+                return  # Command succeeded, no need to retry
+            except:
+                attempt += 1
+                if attempt < maxAttempts:
+                    print(f"Retrying command {command}")
+        
+        print(f"Maximum attempts reached. Giving up on command {command}.")
+        raise Exception(f"Maximum attempts reached. Giving up on command {command}.")
+
     def RunRecipe(self, sampleId, initials, comments, suffixByTimestamp):
         commandWithParameters = f"Capture;{sampleId};{initials};{comments};{suffixByTimestamp}";
-        self.SendCommand(commandWithParameters, "CaptureOK")
+        self.SendCommandWithRetry(commandWithParameters, "CaptureOK")
         
         self.ser.timeout = runRecipeTimeout
         read = self.ser.readline().decode().strip()
@@ -80,3 +96,6 @@ class VideometerLabDevice(object):
         if read != "AnalysisDone":
             raise Exception(f"Did not receive AnalysisDone within {runRecipeTimeout} seconds.")
       
+    def CheckIfLastImageFailed(self):
+        self.SendCommandWithRetry("LastImageFailed", "False")
+

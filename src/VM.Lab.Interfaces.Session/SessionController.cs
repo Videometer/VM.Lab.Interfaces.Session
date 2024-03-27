@@ -22,14 +22,14 @@
 		public abstract void StateChanged(SessionState previousState, SessionState newState);
 
 		/// <summary>
-		/// True if the controller has a barcode reader that should be possible to read manually from session
+		/// Called when something in the pipeline of capturing, analysing, or saving of results, failed for the current image.
+		/// Used to inform external controllers that something went wrong with the current image. 
 		/// </summary>
-		public abstract bool HasBarcodeReader { get; }
+		public abstract void LastImageFailed();
 
-		/// <summary>Reads the barcode if supported</summary>
-		/// <returns>Read barcode</returns>
-		public abstract string ReadBarcode();
-		
-		public abstract void Dispose();
+		/// <summary>Clean up internally used resources</summary>
+		public virtual void Dispose()
+		{
+		}
 	}
 }
