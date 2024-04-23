@@ -4,9 +4,9 @@ from VideometerLabDevice import VideometerLabDevice
 
 device = VideometerLabDevice()
 device.Initialize()
-analysisTimeoutSeconds = 5 # Unit is seconds
+analysisTimeoutSeconds = 10 # Unit is seconds
 device.WaitForAnalysisComplete(analysisTimeoutSeconds) # Wait for the previous sample analysis to complete
-captureImageTimeoutSeconds = 15 # Unit is seconds
+captureImageTimeoutSeconds = 10 # Unit is seconds
 device.CaptureImage("DummySampleId", "DummyInitials", "DummyComments", "True", captureImageTimeoutSeconds)
 sphereUpTimeoutSeconds = 10 # Unit is seconds
 device.WaitForSphereUp(sphereUpTimeoutSeconds)
