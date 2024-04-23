@@ -6,6 +6,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionIt
 	ProjectSection(SolutionItems) = preProject
 		ChangeLog.txt = ChangeLog.txt
 		VM.Lab.Interfaces.Session.nuspec = VM.Lab.Interfaces.Session.nuspec
+		..\README.md = ..\README.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VM.Lab.Session.SerialSessionController", "VM.Lab.Session.SerialSessionController\VM.Lab.Session.SerialSessionController.csproj", "{EAFD5A07-FB19-4F53-8A0D-3B911285F053}"
