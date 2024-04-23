@@ -1,4 +1,5 @@
-﻿using System.IO.Ports;
+﻿using System.Diagnostics;
+using System.IO.Ports;
 using VM.Lab.Interfaces.Session;
 
 namespace VM.Lab.Session.SerialSessionController;
@@ -17,13 +18,14 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
     private const string FinishKeyWord = "Finish";
     private const string NewKeyWord = "New";
     private const string CheckConnectionKeyWord = "CheckConnection";
-    private const string ReadyForNextSampleKeyWord = "ReadyForNextSample";
+    private const string WaitForAnalysisCompleteKeyWord = "WaitForAnalysisComplete";
+    private const string WaitForSphereUpKeyWord = "WaitForSphereUp";
     private const string LastImageFailedKeyWord = "LastImageFailed";
-    private readonly AutoResetEvent _analysisComplete = new AutoResetEvent(false);
     private ISphereHeightProvider _sphereHeightProvider;
     private readonly object _stateLock = new object();
     private bool _lastImageFailed;
-    
+    private string _lastErrorMessage;
+
     private readonly string[] _keyWords =
     {
         CaptureKeyWord,
@@ -31,10 +33,11 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
         FinishKeyWord,
         NewKeyWord,
         CheckConnectionKeyWord,
-        ReadyForNextSampleKeyWord,
+        WaitForAnalysisCompleteKeyWord,
+        WaitForSphereUpKeyWord,
         LastImageFailedKeyWord
     };
-    
+
     /// <summary>
     /// Constructs the external session controller. This method is called internally by the VideometerLab software. 
     /// </summary>
@@ -47,9 +50,10 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
         {
             throw new InvalidOperationException($"The COM Port {port} is already open.");
         }
+
         _serialPort.DataReceived += SerialPort_DataReceived;
         _serialPort.Open();
-        
+
         _serialPort.DiscardInBuffer();
         _serialPort.DiscardOutBuffer();
         _serialPort.ReadExisting();
@@ -62,18 +66,15 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
     {
         lock (_stateLock)
         {
-            Console.WriteLine($"In {nameof(SerialSessionController)}.{nameof(StateChanged)} from {previousState} to {newState}"); 
+            Console.WriteLine($"In {nameof(SerialSessionController)}.{nameof(StateChanged)} from {previousState} to {newState}.");
             _state = newState;
-        }
-        
-        if (newState == SessionState.CAPTURE_SINGLE_FRAME)
-        {
-            // Reset as we have begun on the next image
-            _lastImageFailed = false;
-        }
-        if (newState == SessionState.WAIT_NEXT_SINGLE_FRAME)
-        {
-            _analysisComplete.Set();
+            
+            if (newState == SessionState.CAPTURE_SINGLE_FRAME)
+            {
+                // Reset as we have begun on the next image
+                _lastImageFailed = false;
+                _lastErrorMessage = null;
+            }
         }
     }
 
@@ -89,11 +90,14 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
             case CaptureKeyWord:
                 expectedParts = 5;
                 break;
+            case WaitForAnalysisCompleteKeyWord:
+            case WaitForSphereUpKeyWord:
+                expectedParts = 2;
+                break;
             case PauseKeyWord:
             case FinishKeyWord:
             case NewKeyWord:
             case CheckConnectionKeyWord:
-            case ReadyForNextSampleKeyWord:
             case LastImageFailedKeyWord:
                 expectedParts = 1;
                 break;
@@ -101,17 +105,21 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
                 var receivedString = data.Length == 0
                     ? "Received an empty string."
                     : $"Received {data}.";
-                _serialPort.WriteLine($"The arguments passed to the {nameof(SerialSessionController)} are invalid. " +
-                                      $"The first word must be either {string.Join(", ", _keyWords)}. {receivedString}");
+
+                var message = $"The arguments passed to the {nameof(SerialSessionController)} are invalid. " +
+                              $"The first word must be either {string.Join(", ", _keyWords)}. {receivedString}";
+                Console.WriteLine(message);
+                _serialPort.WriteLine(message);
                 return;
         }
 
         if (parts.Length != expectedParts)
         {
-            _serialPort.WriteLine($"Expected {expectedParts} arguments seperated by {Separator}, but received {parts.Length}. Received {data}");
+            _serialPort.WriteLine(
+                $"Expected {expectedParts} arguments seperated by {Separator}, but received {parts.Length}. Received {data}");
             return;
         }
-       
+
         switch (parts[0])
         {
             case CaptureKeyWord:
@@ -123,9 +131,6 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
                 bool suffixByTimestamp = parts[4] == "True";
                 _listener.Capture(parts[0], parts[1], parts[2], suffixByTimestamp);
                 _serialPort.WriteLine("CaptureOK");
-                WaitForAnalysisToComplete();
-                _serialPort.WriteLine("AnalysisDone");
-                Console.WriteLine($"{nameof(SerialSessionController)}: AnalysisDone");
                 break;
             case PauseKeyWord:
                 _listener.Pause();
@@ -139,54 +144,114 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
             case CheckConnectionKeyWord:
                 _serialPort.WriteLine("ConnectionOK");
                 break;
-            case ReadyForNextSampleKeyWord:
-                var sphereHeight = _sphereHeightProvider.GetSphereHeight();
-                const float minimumSafeSphereHeight = 90;
-                var sphereHeightOk = sphereHeight > minimumSafeSphereHeight;
-                if (!sphereHeightOk)
+            case WaitForAnalysisCompleteKeyWord:
+            {
+                var parseOk = Int32.TryParse(parts[1], out var analysisTimeoutSeconds);
+                if (!parseOk)
                 {
-                    Console.WriteLine($"{nameof(SerialSessionController)}: Not ready for next sample as sphere height was {sphereHeight} but must be at minimum {minimumSafeSphereHeight}.");
+                    _serialPort.WriteLine($"Unable to parse analysis timeout parameter. Parameter was: {parts[1]}.");
+                    return;
                 }
-                bool stateMachineReady;
-                lock (_stateLock)
+                var analysisTimeoutMs = analysisTimeoutSeconds * 1000;
+                bool waitOk = WaitForAnalysisToComplete(analysisTimeoutMs);
+                if (waitOk)
                 {
-                    stateMachineReady = _state is SessionState.IDLE_SINGLE_FRAME or SessionState.WAIT_NEXT_SINGLE_FRAME;
-                    if (!stateMachineReady)
+                    _serialPort.WriteLine("AnalysisComplete");
+                }
+                else
+                {
+                    var message = $"Failed waiting for analysis to finish. Waited {analysisTimeoutMs}ms.";
+                    Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForAnalysisCompleteKeyWord}: {message}");
+                    _serialPort.WriteLine(message);
+                }
+                break;
+            }
+            case WaitForSphereUpKeyWord:
+            {
+                var parseOk = Int32.TryParse(parts[1], out var sphereUpTimeoutSeconds);
+                if (!parseOk)
+                {
+                    _serialPort.WriteLine($"Unable to parse sphere up timeout parameter. Parameter was: {parts[1]}.");
+                    return;
+                }
+                bool sphereHeightOk = false;
+                bool loggedOnce = false;
+                var s = Stopwatch.StartNew();
+                var sphereUpTimeoutMs = sphereUpTimeoutSeconds * 1000;
+                while (!sphereHeightOk && s.ElapsedMilliseconds < sphereUpTimeoutMs)
+                {
+                    var sphereHeight = _sphereHeightProvider.GetSphereHeight();
+                    Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForSphereUpKeyWord}: {sphereHeight}");
+                    const float minimumSafeSphereHeight = 90;
+                    sphereHeightOk = sphereHeight > minimumSafeSphereHeight;
+                    if (!sphereHeightOk && !loggedOnce)
                     {
-                        Console.WriteLine(
-                            $"{nameof(SerialSessionController)}: Not ready for next sample as state machine state was " +
-                            $"{_state} but must be {SessionState.IDLE_SINGLE_FRAME} or {SessionState.WAIT_NEXT_SINGLE_FRAME}.");
+                        loggedOnce = true;
+                        Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForSphereUpKeyWord}: " +
+                                          $"Sphere height was {sphereHeight} but must be at minimum {minimumSafeSphereHeight}. " +
+                                          $"Waiting for sphere to move up.");
                     }
+
+                    Thread.Sleep(500);
                 }
 
-                var ready = sphereHeightOk && stateMachineReady ? "True" : "False";
-                _serialPort.WriteLine(ready);
+                // If sphere is still not up then we timed out
+                if (!sphereHeightOk)
+                {
+                    var message = $"Failed waiting for sphere to move up. Waited {sphereUpTimeoutMs}ms.";
+                    Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForSphereUpKeyWord}: {message}");
+                    _serialPort.WriteLine(message);
+                }
+                else
+                {
+                    _serialPort.WriteLine("SphereIsUp");
+                }
                 break;
+            }
             case LastImageFailedKeyWord:
-                var answer = _lastImageFailed ? "True" : "False";
+                var answer = _lastImageFailed ? $"True: {_lastErrorMessage}" : "False";
                 _serialPort.WriteLine(answer);
                 break;
             default:
-                _serialPort.WriteLine($"The arguments passed to the {nameof(SerialSessionController)} are invalid. Received: {data}");
+                _serialPort.WriteLine(
+                    $"The arguments passed to the {nameof(SerialSessionController)} are invalid. Received: {data}");
                 return;
         }
     }
-    
-    private void WaitForAnalysisToComplete()
+
+    private bool WaitForAnalysisToComplete(int timeoutMs)
     {
-        // There is not timeout here as the timeout is handled on the Python side
-        _analysisComplete.WaitOne();
+        bool loggedOnce = false;
+        bool stateMachineReady = false;
+        var s = Stopwatch.StartNew();
+        while (!stateMachineReady && s.ElapsedMilliseconds < timeoutMs)
+        {
+            lock (_stateLock)
+            {
+                stateMachineReady = _state is SessionState.IDLE_SINGLE_FRAME or SessionState.WAIT_NEXT_SINGLE_FRAME;
+                if (!stateMachineReady && !loggedOnce)
+                {
+                    loggedOnce = true;
+                    Console.WriteLine(
+                        $"{nameof(SerialSessionController)}:{nameof(WaitForAnalysisToComplete)}: Not ready for next sample as state machine state was " +
+                        $"{_state} but must be {SessionState.IDLE_SINGLE_FRAME} or {SessionState.WAIT_NEXT_SINGLE_FRAME}.");
+                }
+            }
+        }
+
+        return stateMachineReady;
     }
 
     /// <summary>
     /// Called when something in the pipeline of capturing, analysing, or saving of results, failed for the current image.
     /// Used to inform external controllers that something went wrong with the current image. 
     /// </summary>
-    public override void LastImageFailed()
+    public override void LastImageFailed(string errorMessage)
     {
         _lastImageFailed = true;
+        _lastErrorMessage = errorMessage;
     }
-    
+
     /// <summary>
     /// Provides the concrete implementation of <see cref="ISphereHeightProvider"/>.
     /// This method is called internally by the VideometerLab software. 
@@ -196,7 +261,7 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
     {
         _sphereHeightProvider = provider;
     }
-    
+
     /// <summary>Clean up internally used resources</summary>
     public override void Dispose()
     {

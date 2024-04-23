@@ -25,7 +25,8 @@
 		/// Called when something in the pipeline of capturing, analysing, or saving of results, failed for the current image.
 		/// Used to inform external controllers that something went wrong with the current image. 
 		/// </summary>
-		public abstract void LastImageFailed();
+		/// <param name="errorMessage">Error message explaining why the analysis failed</param>
+		public abstract void LastImageFailed(string errorMessage);
 
 		/// <summary>Clean up internally used resources</summary>
 		public virtual void Dispose()

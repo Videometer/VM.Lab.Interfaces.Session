@@ -19,5 +19,6 @@
 </PropertyGroup>
 <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
   <DebugType>full</DebugType>
+  <DocumentationFile>bin\Debug\VM.Lab.Interfaces.Session.xml</DocumentationFile>
 </PropertyGroup>
 </Project>
