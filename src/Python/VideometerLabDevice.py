@@ -11,10 +11,12 @@ initializeRetries = 3
 secondsToWaitBetweenInitializeRetries = 5
 # The maximum number of times ot try and resend a command if the sending of the command fails or if the response is not the expected.
 sendCommandMaxRetries = 3
+# The com port to connect to. I.e. the com port that the VideometerLab instrument is connected to.
+comPort = 'COM1'
 
 class VideometerLabDevice(object):
     def __init__(self):
-        self.port = 'COM1' # Move to parameter in the top of the file
+        self.port = comPort
         self.baud = 9600
         self.databits = serial.SEVENBITS
         self.parity = serial.PARITY_EVEN
@@ -86,6 +88,9 @@ class VideometerLabDevice(object):
         self.SendCommandWithRetry(commandWithParameters, "CaptureOK", captureImageTimeoutSeconds)
                 
     def WaitForAnalysisComplete(self, analysisTimeoutSeconds):
+        # In case the analysis do not finish in time, allow for a small amount of slack to have time to read the correct
+        # error message over the serial connection instead of just throwing a timeout.
+        analysisTimeoutSeconds = analysisTimeoutSeconds + 1 
         commandWithParameters = f"WaitForAnalysisComplete;{analysisTimeoutSeconds}";
         self.SendCommandWithRetry(commandWithParameters, "AnalysisComplete", analysisTimeoutSeconds)
         
