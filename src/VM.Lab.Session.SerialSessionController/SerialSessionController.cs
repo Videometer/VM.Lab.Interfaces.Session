@@ -80,8 +80,6 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
         }
     }
 
-  
-
     private void EnforceOneCommandAtATime()
     {
         try
@@ -177,7 +175,7 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
                 else
                 {
                     var message = $"Failed waiting for capture to finish. Waited {captureTimeoutMs}ms.";
-                    Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForCaptureComplete}: {message}");
+                    Console.WriteLine($"{nameof(SerialSessionController)}:{nameof(WaitForCaptureComplete)}: {message}");
                     _serialPort.WriteLine(message);
                 }
                 
@@ -211,7 +209,7 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
                 else
                 {
                     var message = $"Failed waiting for analysis to finish. Waited {analysisTimeoutMs}ms.";
-                    Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForAnalysisToComplete}: {message}");
+                    Console.WriteLine($"{nameof(SerialSessionController)}:{nameof(WaitForAnalysisToComplete)}: {message}");
                     _serialPort.WriteLine(message);
                 }
                 break;
