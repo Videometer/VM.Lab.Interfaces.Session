@@ -25,6 +25,8 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
     private readonly object _stateLock = new object();
     private bool _lastImageFailed;
     private string _lastErrorMessage;
+    private bool _commandProcessingLockAcquired;
+    private readonly object _commandProcessingLock = new object();
 
     private readonly string[] _keyWords =
     {
@@ -78,17 +80,46 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
         }
     }
 
-    /// <summary>Called when data is received from the external device</summary>
-    private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
+  
+
+    private void EnforceOneCommandAtATime()
     {
-        var data = _serialPort.ReadLine();
+        try
+        {
+            // Attempt to acquire the lock without blocking
+            if (Monitor.TryEnter(_commandProcessingLock))
+            {
+                _commandProcessingLockAcquired = true;
+                HandleCommand();
+            }
+            else
+            {
+                // Handle the case where the lock is not immediately available
+                const string message = "Already processing previous command. New command ignored.";
+                Console.WriteLine($"{nameof(SerialSessionController)}: " + message);
+                _serialPort.WriteLine(message);
+            }
+        }
+        finally
+        {
+            // Release the lock if acquired
+            if (_commandProcessingLockAcquired)
+            {
+                Monitor.Exit(_commandProcessingLock);
+            } 
+        }
+    }
+
+    private void HandleCommand()
+    {
+         var data = _serialPort.ReadLine();
         Console.WriteLine($"{nameof(SerialSessionController)} received: " + data);
         var parts = data.Split(Separator);
         int expectedParts;
         switch (parts[0])
         {
             case CaptureKeyWord:
-                expectedParts = 5;
+                expectedParts = 6;
                 break;
             case WaitForAnalysisCompleteKeyWord:
             case WaitForSphereUpKeyWord:
@@ -123,15 +154,35 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
         switch (parts[0])
         {
             case CaptureKeyWord:
+            {
                 if (parts[4] is not ("True" or "False"))
                 {
                     _serialPort.WriteLine($"Last parameter must be either \"True\" or \"False\", but was {parts[4]}");
                     return;
                 }
+                var parseOk = ParseTimeout(parts[5], "capture", out var captureTimeoutSeconds);
+                if (!parseOk)
+                {
+                    return;
+                }
                 bool suffixByTimestamp = parts[4] == "True";
                 _listener.Capture(parts[0], parts[1], parts[2], suffixByTimestamp);
-                _serialPort.WriteLine("CaptureOK");
+                
+                var captureTimeoutMs = captureTimeoutSeconds * 1000;
+                bool waitOk = WaitForCaptureComplete(captureTimeoutMs);
+                if (waitOk)
+                {
+                    _serialPort.WriteLine("CaptureOK");
+                }
+                else
+                {
+                    var message = $"Failed waiting for capture to finish. Waited {captureTimeoutMs}ms.";
+                    Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForCaptureComplete}: {message}");
+                    _serialPort.WriteLine(message);
+                }
+                
                 break;
+            }
             case PauseKeyWord:
                 _listener.Pause();
                 break;
@@ -146,10 +197,9 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
                 break;
             case WaitForAnalysisCompleteKeyWord:
             {
-                var parseOk = Int32.TryParse(parts[1], out var analysisTimeoutSeconds);
+                var parseOk = ParseTimeout(parts[1], "analysis", out var analysisTimeoutSeconds);
                 if (!parseOk)
                 {
-                    _serialPort.WriteLine($"Unable to parse analysis timeout parameter. Parameter was: {parts[1]}.");
                     return;
                 }
                 var analysisTimeoutMs = analysisTimeoutSeconds * 1000;
@@ -161,17 +211,16 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
                 else
                 {
                     var message = $"Failed waiting for analysis to finish. Waited {analysisTimeoutMs}ms.";
-                    Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForAnalysisCompleteKeyWord}: {message}");
+                    Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForAnalysisToComplete}: {message}");
                     _serialPort.WriteLine(message);
                 }
                 break;
             }
             case WaitForSphereUpKeyWord:
             {
-                var parseOk = Int32.TryParse(parts[1], out var sphereUpTimeoutSeconds);
+                var parseOk = ParseTimeout(parts[1], "sphere up", out var sphereUpTimeoutSeconds);
                 if (!parseOk)
                 {
-                    _serialPort.WriteLine($"Unable to parse sphere up timeout parameter. Parameter was: {parts[1]}.");
                     return;
                 }
                 bool sphereHeightOk = false;
@@ -218,6 +267,22 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
                 return;
         }
     }
+    
+    private bool ParseTimeout(string timeoutToParse, string timeoutType, out int timeout)
+    {
+        var parseOk = int.TryParse(timeoutToParse, out timeout);
+        if (!parseOk)
+        {
+            _serialPort.WriteLine($"Unable to parse {timeoutType} timeout parameter. Parameter was: {timeoutToParse}.");
+        }
+        return parseOk;
+    }
+
+    /// <summary>Called when data is received from the external device</summary>
+    private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
+    {
+        EnforceOneCommandAtATime();
+    }
 
     private bool WaitForAnalysisToComplete(int timeoutMs)
     {
@@ -235,6 +300,27 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
                     Console.WriteLine(
                         $"{nameof(SerialSessionController)}:{nameof(WaitForAnalysisToComplete)}: Not ready for next sample as state machine state was " +
                         $"{_state} but must be {SessionState.IDLE_SINGLE_FRAME} or {SessionState.WAIT_NEXT_SINGLE_FRAME}.");
+                }
+            }
+        }
+
+        return stateMachineReady;
+    }
+    
+    private bool WaitForCaptureComplete(int timeoutMs)
+    {
+        bool loggedOnce = false;
+        bool stateMachineReady = false;
+        var s = Stopwatch.StartNew();
+        while (!stateMachineReady && s.ElapsedMilliseconds < timeoutMs)
+        {
+            lock (_stateLock)
+            {
+                stateMachineReady = _state is SessionState.ANALYZING_SINGLE_FRAME or SessionState.WAIT_NEXT_SINGLE_FRAME;
+                if (!stateMachineReady && !loggedOnce)
+                {
+                    loggedOnce = true;
+                    Console.WriteLine($"{nameof(SerialSessionController)}:{nameof(WaitForCaptureComplete)}: Waiting for capture to complete.");
                 }
             }
         }
