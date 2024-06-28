@@ -229,7 +229,7 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
                 {
                     var sphereHeight = _sphereHeightProvider.GetSphereHeight();
                     Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForSphereUpKeyWord}: {sphereHeight}");
-                    const float minimumSafeSphereHeight = 90;
+                    const float minimumSafeSphereHeight = 85;
                     sphereHeightOk = sphereHeight > minimumSafeSphereHeight;
                     if (!sphereHeightOk && !loggedOnce)
                     {
