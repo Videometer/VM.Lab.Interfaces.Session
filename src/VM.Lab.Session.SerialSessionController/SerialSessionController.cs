@@ -164,7 +164,7 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
                     return;
                 }
                 bool suffixByTimestamp = parts[4] == "True";
-                _listener.Capture(parts[0], parts[1], parts[2], suffixByTimestamp);
+                _listener.Capture(parts[1], parts[2], parts[3], suffixByTimestamp);
                 
                 var captureTimeoutMs = captureTimeoutSeconds * 1000;
                 bool waitOk = WaitForCaptureComplete(captureTimeoutMs);
