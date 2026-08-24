@@ -1,7 +1,7 @@
 ﻿namespace VM.Lab.Interfaces.Session
 {
 	/// <summary>Interface for controlling a session</summary>
-	public interface ISessionControllerListener
+	public interface ISessionControllerListener_Old
 	{
 		/// <summary>Start a new measurement</summary>
 		/// <param name="id">ID of the sample</param>

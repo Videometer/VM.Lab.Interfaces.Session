@@ -4,11 +4,11 @@
 	public abstract class SessionController_Old : IDisposable
 	{
 		/// <summary>Implementer of session control commands</summary>
-		protected readonly ISessionControllerListener _listener;
+		protected readonly ISessionControllerListener_Old _listener;
 
 		/// <summary>An agent that controls sessions</summary>
 		/// <param name="listener"></param>
-		public SessionController_Old(ISessionControllerListener listener)
+		public SessionController_Old(ISessionControllerListener_Old listener)
 		{
 			_listener = listener;
 		}

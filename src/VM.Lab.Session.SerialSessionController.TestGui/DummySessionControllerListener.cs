@@ -2,7 +2,7 @@
 
 namespace VM.Lab.Session.SerialSessionController.TestGui;
 
-public class DummySessionControllerListener : ISessionControllerListener
+public class DummySessionControllerListener : ISessionControllerListener_Old
 {
     public event EventHandler CaptureCalled;
     

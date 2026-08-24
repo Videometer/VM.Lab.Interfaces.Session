@@ -44,7 +44,7 @@ public class SerialSessionController_Old : SessionController_Old, INeedSphereHei
     /// Constructs the external session controller. This method is called internally by the VideometerLab software. 
     /// </summary>
     /// <param name="listener">The session listener that is use to provide commands to the session</param>
-    public SerialSessionController_Old(ISessionControllerListener listener) : base(listener)
+    public SerialSessionController_Old(ISessionControllerListener_Old listener) : base(listener)
     {
         const string port = "COM2";
         _serialPort = new SerialPort(port, 9600, Parity.None, 8, StopBits.One);
