@@ -6,7 +6,7 @@ Console.WriteLine("This program simulated the VideometerLab Session application"
 Console.WriteLine("This program is used to send commands corresponding to the actions that happen when the user clicks buttons in the session GUI.");
 
 bool firstCapture = true;
-var listener = new DummySessionControllerListener();
+var listener = new DummySessionControllerListener_Old();
 var controller = new SerialSessionController_Old(listener);
 listener.CaptureCalled += (_, _) => 
 {
