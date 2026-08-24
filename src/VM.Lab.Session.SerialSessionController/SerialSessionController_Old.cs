@@ -8,7 +8,7 @@ namespace VM.Lab.Session.SerialSessionController;
 /// Concrete implementation of a external session controller that is controlled by an external device that
 /// communicate with this controller using serial communication over a COM port. 
 /// </summary>
-public class SerialSessionController : SessionController_Old, INeedSphereHeightProvider
+public class SerialSessionController_Old : SessionController_Old, INeedSphereHeightProvider
 {
     private readonly SerialPort _serialPort;
     private SessionState_Old _state;
@@ -44,7 +44,7 @@ public class SerialSessionController : SessionController_Old, INeedSphereHeightP
     /// Constructs the external session controller. This method is called internally by the VideometerLab software. 
     /// </summary>
     /// <param name="listener">The session listener that is use to provide commands to the session</param>
-    public SerialSessionController(ISessionControllerListener listener) : base(listener)
+    public SerialSessionController_Old(ISessionControllerListener listener) : base(listener)
     {
         const string port = "COM2";
         _serialPort = new SerialPort(port, 9600, Parity.None, 8, StopBits.One);
@@ -68,7 +68,7 @@ public class SerialSessionController : SessionController_Old, INeedSphereHeightP
     {
         lock (_stateLock)
         {
-            Console.WriteLine($"In {nameof(SerialSessionController)}.{nameof(StateChanged)} from {previousState} to {newState}.");
+            Console.WriteLine($"In {nameof(SerialSessionController_Old)}.{nameof(StateChanged)} from {previousState} to {newState}.");
             _state = newState;
             
             if (newState == SessionState_Old.CAPTURE_SINGLE_FRAME)
@@ -94,7 +94,7 @@ public class SerialSessionController : SessionController_Old, INeedSphereHeightP
             {
                 // Handle the case where the lock is not immediately available
                 const string message = "Already processing previous command. New command ignored.";
-                Console.WriteLine($"{nameof(SerialSessionController)}: " + message);
+                Console.WriteLine($"{nameof(SerialSessionController_Old)}: " + message);
                 _serialPort.WriteLine(message);
             }
         }
@@ -111,7 +111,7 @@ public class SerialSessionController : SessionController_Old, INeedSphereHeightP
     private void HandleCommand()
     {
          var data = _serialPort.ReadLine();
-        Console.WriteLine($"{nameof(SerialSessionController)} received: " + data);
+        Console.WriteLine($"{nameof(SerialSessionController_Old)} received: " + data);
         var parts = data.Split(Separator);
         int expectedParts;
         switch (parts[0])
@@ -135,7 +135,7 @@ public class SerialSessionController : SessionController_Old, INeedSphereHeightP
                     ? "Received an empty string."
                     : $"Received {data}.";
 
-                var message = $"The arguments passed to the {nameof(SerialSessionController)} are invalid. " +
+                var message = $"The arguments passed to the {nameof(SerialSessionController_Old)} are invalid. " +
                               $"The first word must be either {string.Join(", ", _keyWords)}. {receivedString}";
                 Console.WriteLine(message);
                 _serialPort.WriteLine(message);
@@ -175,7 +175,7 @@ public class SerialSessionController : SessionController_Old, INeedSphereHeightP
                 else
                 {
                     var message = $"Failed waiting for capture to finish. Waited {captureTimeoutMs}ms.";
-                    Console.WriteLine($"{nameof(SerialSessionController)}:{nameof(WaitForCaptureComplete)}: {message}");
+                    Console.WriteLine($"{nameof(SerialSessionController_Old)}:{nameof(WaitForCaptureComplete)}: {message}");
                     _serialPort.WriteLine(message);
                 }
                 
@@ -209,7 +209,7 @@ public class SerialSessionController : SessionController_Old, INeedSphereHeightP
                 else
                 {
                     var message = $"Failed waiting for analysis to finish. Waited {analysisTimeoutMs}ms.";
-                    Console.WriteLine($"{nameof(SerialSessionController)}:{nameof(WaitForAnalysisToComplete)}: {message}");
+                    Console.WriteLine($"{nameof(SerialSessionController_Old)}:{nameof(WaitForAnalysisToComplete)}: {message}");
                     _serialPort.WriteLine(message);
                 }
                 break;
@@ -228,13 +228,13 @@ public class SerialSessionController : SessionController_Old, INeedSphereHeightP
                 while (!sphereHeightOk && s.ElapsedMilliseconds < sphereUpTimeoutMs)
                 {
                     var sphereHeight = _sphereHeightProvider.GetSphereHeight();
-                    Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForSphereUpKeyWord}: {sphereHeight}");
+                    Console.WriteLine($"{nameof(SerialSessionController_Old)}:{WaitForSphereUpKeyWord}: {sphereHeight}");
                     const float minimumSafeSphereHeight = 82;
                     sphereHeightOk = sphereHeight > minimumSafeSphereHeight;
                     if (!sphereHeightOk && !loggedOnce)
                     {
                         loggedOnce = true;
-                        Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForSphereUpKeyWord}: " +
+                        Console.WriteLine($"{nameof(SerialSessionController_Old)}:{WaitForSphereUpKeyWord}: " +
                                           $"Sphere height was {sphereHeight} but must be at minimum {minimumSafeSphereHeight}. " +
                                           $"Waiting for sphere to move up.");
                     }
@@ -246,7 +246,7 @@ public class SerialSessionController : SessionController_Old, INeedSphereHeightP
                 if (!sphereHeightOk)
                 {
                     var message = $"Failed waiting for sphere to move up. Waited {sphereUpTimeoutMs}ms.";
-                    Console.WriteLine($"{nameof(SerialSessionController)}:{WaitForSphereUpKeyWord}: {message}");
+                    Console.WriteLine($"{nameof(SerialSessionController_Old)}:{WaitForSphereUpKeyWord}: {message}");
                     _serialPort.WriteLine(message);
                 }
                 else
@@ -261,7 +261,7 @@ public class SerialSessionController : SessionController_Old, INeedSphereHeightP
                 break;
             default:
                 _serialPort.WriteLine(
-                    $"The arguments passed to the {nameof(SerialSessionController)} are invalid. Received: {data}");
+                    $"The arguments passed to the {nameof(SerialSessionController_Old)} are invalid. Received: {data}");
                 return;
         }
     }
@@ -296,7 +296,7 @@ public class SerialSessionController : SessionController_Old, INeedSphereHeightP
                 {
                     loggedOnce = true;
                     Console.WriteLine(
-                        $"{nameof(SerialSessionController)}:{nameof(WaitForAnalysisToComplete)}: Not ready for next sample as state machine state was " +
+                        $"{nameof(SerialSessionController_Old)}:{nameof(WaitForAnalysisToComplete)}: Not ready for next sample as state machine state was " +
                         $"{_state} but must be {SessionState_Old.IDLE_SINGLE_FRAME} or {SessionState_Old.WAIT_NEXT_SINGLE_FRAME}.");
                 }
             }
@@ -318,7 +318,7 @@ public class SerialSessionController : SessionController_Old, INeedSphereHeightP
                 if (!stateMachineReady && !loggedOnce)
                 {
                     loggedOnce = true;
-                    Console.WriteLine($"{nameof(SerialSessionController)}:{nameof(WaitForCaptureComplete)}: Waiting for capture to complete.");
+                    Console.WriteLine($"{nameof(SerialSessionController_Old)}:{nameof(WaitForCaptureComplete)}: Waiting for capture to complete.");
                 }
             }
         }

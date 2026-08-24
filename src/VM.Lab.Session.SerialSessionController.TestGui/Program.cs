@@ -7,7 +7,7 @@ Console.WriteLine("This program is used to send commands corresponding to the ac
 
 bool firstCapture = true;
 var listener = new DummySessionControllerListener();
-var controller = new SerialSessionController(listener);
+var controller = new SerialSessionController_Old(listener);
 listener.CaptureCalled += (_, _) => 
 {
     CaptureCalled();
