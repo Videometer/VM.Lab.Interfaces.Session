@@ -8,13 +8,10 @@ public interface ISessionControllerListener
     /// <param name="initials">Operator initials</param>
     /// <param name="comments">Operator comments</param>
     void Capture(string id, string initials, string comments);
-
-    /// <summary>Pause the current capture process</summary>
-    void Pause();
-
-    /// <summary>Finish the measurement</summary>
-    void Finish();
-
+    
     /// <summary>Starts a new measurement</summary>
     void New();
+    
+    /// <summary>Finish the measurement</summary>
+    void Finish();
 }
