@@ -1,7 +1,7 @@
 ﻿namespace VM.Lab.Interfaces.Session
 {
 	/// <summary>Enumerator with session states</summary>
-	public enum SessionState
+	public enum SessionState_Old
 	{
 		/// <summary>
 		/// Undefined / No recipe loaded

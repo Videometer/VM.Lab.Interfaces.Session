@@ -11,7 +11,7 @@ namespace VM.Lab.Session.SerialSessionController;
 public class SerialSessionController : SessionController, INeedSphereHeightProvider
 {
     private readonly SerialPort _serialPort;
-    private SessionState _state;
+    private SessionState_Old _state;
     private const char Separator = ';';
     private const string CaptureKeyWord = "Capture";
     private const string PauseKeyWord = "Pause";
@@ -64,14 +64,14 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
     /// <summary>Occurs when a session state has changed</summary>
     /// <param name="previousState"></param>
     /// <param name="newState"></param>
-    public override void StateChanged(SessionState previousState, SessionState newState)
+    public override void StateChanged(SessionState_Old previousState, SessionState_Old newState)
     {
         lock (_stateLock)
         {
             Console.WriteLine($"In {nameof(SerialSessionController)}.{nameof(StateChanged)} from {previousState} to {newState}.");
             _state = newState;
             
-            if (newState == SessionState.CAPTURE_SINGLE_FRAME)
+            if (newState == SessionState_Old.CAPTURE_SINGLE_FRAME)
             {
                 // Reset as we have begun on the next image
                 _lastImageFailed = false;
@@ -291,13 +291,13 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
         {
             lock (_stateLock)
             {
-                stateMachineReady = _state is SessionState.IDLE_SINGLE_FRAME or SessionState.WAIT_NEXT_SINGLE_FRAME;
+                stateMachineReady = _state is SessionState_Old.IDLE_SINGLE_FRAME or SessionState_Old.WAIT_NEXT_SINGLE_FRAME;
                 if (!stateMachineReady && !loggedOnce)
                 {
                     loggedOnce = true;
                     Console.WriteLine(
                         $"{nameof(SerialSessionController)}:{nameof(WaitForAnalysisToComplete)}: Not ready for next sample as state machine state was " +
-                        $"{_state} but must be {SessionState.IDLE_SINGLE_FRAME} or {SessionState.WAIT_NEXT_SINGLE_FRAME}.");
+                        $"{_state} but must be {SessionState_Old.IDLE_SINGLE_FRAME} or {SessionState_Old.WAIT_NEXT_SINGLE_FRAME}.");
                 }
             }
         }
@@ -314,7 +314,7 @@ public class SerialSessionController : SessionController, INeedSphereHeightProvi
         {
             lock (_stateLock)
             {
-                stateMachineReady = _state is SessionState.ANALYZING_SINGLE_FRAME or SessionState.WAIT_NEXT_SINGLE_FRAME;
+                stateMachineReady = _state is SessionState_Old.ANALYZING_SINGLE_FRAME or SessionState_Old.WAIT_NEXT_SINGLE_FRAME;
                 if (!stateMachineReady && !loggedOnce)
                 {
                     loggedOnce = true;

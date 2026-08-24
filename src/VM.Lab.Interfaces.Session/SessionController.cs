@@ -19,7 +19,7 @@
 		/// </summary>
 		/// <param name="previousState"></param>
 		/// <param name="newState"></param>
-		public abstract void StateChanged(SessionState previousState, SessionState newState);
+		public abstract void StateChanged(SessionState_Old previousState, SessionState_Old newState);
 
 		/// <summary>
 		/// Called when something in the pipeline of capturing, analysing, or saving of results, failed for the current image.

@@ -14,7 +14,7 @@ listener.CaptureCalled += (_, _) =>
 };
 
 // Simulate that the session window have been opened
-controller.StateChanged(SessionState.NONE, SessionState.IDLE_SINGLE_FRAME); 
+controller.StateChanged(SessionState_Old.NONE, SessionState_Old.IDLE_SINGLE_FRAME); 
 
 while (true)
 {
@@ -28,7 +28,7 @@ while (true)
             break;
         case "new":
             firstCapture = true;
-            controller.StateChanged(SessionState.WAIT_NEXT_SINGLE_FRAME, SessionState.IDLE_SINGLE_FRAME);
+            controller.StateChanged(SessionState_Old.WAIT_NEXT_SINGLE_FRAME, SessionState_Old.IDLE_SINGLE_FRAME);
             break;
         case "exit":
             return;
@@ -43,9 +43,9 @@ void CaptureCalled()
     if (firstCapture)
     {
         firstCapture = false;
-        controller.StateChanged(SessionState.NONE, SessionState.IDLE_SINGLE_FRAME);
+        controller.StateChanged(SessionState_Old.NONE, SessionState_Old.IDLE_SINGLE_FRAME);
     }
-    controller.StateChanged(SessionState.IDLE_SINGLE_FRAME, SessionState.CAPTURE_SINGLE_FRAME);
-    controller.StateChanged(SessionState.CAPTURE_SINGLE_FRAME, SessionState.WAIT_NEXT_SINGLE_FRAME);
+    controller.StateChanged(SessionState_Old.IDLE_SINGLE_FRAME, SessionState_Old.CAPTURE_SINGLE_FRAME);
+    controller.StateChanged(SessionState_Old.CAPTURE_SINGLE_FRAME, SessionState_Old.WAIT_NEXT_SINGLE_FRAME);
 }
 
