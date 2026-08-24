@@ -1,14 +1,14 @@
 ﻿namespace VM.Lab.Interfaces.Session
 {
 	/// <summary>Implement this to be an agent that controls sessions</summary>
-	public abstract class SessionController : IDisposable
+	public abstract class SessionController_Old : IDisposable
 	{
 		/// <summary>Implementer of session control commands</summary>
 		protected readonly ISessionControllerListener _listener;
 
 		/// <summary>An agent that controls sessions</summary>
 		/// <param name="listener"></param>
-		public SessionController(ISessionControllerListener listener)
+		public SessionController_Old(ISessionControllerListener listener)
 		{
 			_listener = listener;
 		}

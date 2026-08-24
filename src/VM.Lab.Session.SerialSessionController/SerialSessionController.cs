@@ -8,7 +8,7 @@ namespace VM.Lab.Session.SerialSessionController;
 /// Concrete implementation of a external session controller that is controlled by an external device that
 /// communicate with this controller using serial communication over a COM port. 
 /// </summary>
-public class SerialSessionController : SessionController, INeedSphereHeightProvider
+public class SerialSessionController : SessionController_Old, INeedSphereHeightProvider
 {
     private readonly SerialPort _serialPort;
     private SessionState_Old _state;
