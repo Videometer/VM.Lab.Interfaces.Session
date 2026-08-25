@@ -1,7 +1,7 @@
 ﻿namespace VM.Lab.Interfaces.Session;
 
 /// <summary>Interface for controlling a session</summary>
-public interface ISessionControllerListener
+public interface IExternalSessionControllerListener
 {
     /// <summary>Start a new measurement</summary>
     /// <param name="id">ID of the sample</param>
@@ -9,7 +9,10 @@ public interface ISessionControllerListener
     /// <param name="comments">Operator comments</param>
     void Capture(string id, string initials, string comments);
     
-    /// <summary>Starts a new measurement</summary>
+    /// <summary>
+    /// Starts a new measurement.
+    /// Clears the GUI and makes ready for a fresh analysis with results saved to new files.
+    /// </summary>
     void New();
     
     /// <summary>Loads a specified light setup configuration into the device</summary>
