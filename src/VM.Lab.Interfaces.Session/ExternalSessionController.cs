@@ -18,9 +18,10 @@ public abstract class ExternalSessionController
     public abstract void StateChanged(SessionState newState);
 
     /// <summary>
-    /// Called when something in the pipeline of capturing, analysing, or saving of results, failed for the current image.
-    /// Used to inform external controllers that something went wrong with the current image. 
+    /// Called id an error happens, for example, something in the pipeline of capturing, analyzing, or saving of results, failed for the current image.
+    /// Used to inform external controllers that something went wrong. 
+    /// Used to inform external controllers that something went wrong. 
     /// </summary>
-    /// <param name="errorMessage">Error message explaining why the analysis failed</param>
-    public abstract void LastImageFailed(string errorMessage); // TODO: Rename to ProvideErrorMessage? Also called if connect fails
+    /// <param name="errorMessage">Error message explaining what failed</param>
+    public abstract void ProvideErrorMessage(string errorMessage);
 }
