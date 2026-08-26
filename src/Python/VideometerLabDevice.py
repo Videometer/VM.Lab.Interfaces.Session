@@ -18,8 +18,8 @@ class VideometerLabDevice(object):
     def __init__(self):
         self.port = comPort
         self.baud = 9600
-        self.databits = serial.SEVENBITS
-        self.parity = serial.PARITY_EVEN
+        self.databits = serial.EIGHTBITS
+        self.parity = serial.PARITY_NONE
         self.stopbits = serial.STOPBITS_ONE
         self.ser = None
         
