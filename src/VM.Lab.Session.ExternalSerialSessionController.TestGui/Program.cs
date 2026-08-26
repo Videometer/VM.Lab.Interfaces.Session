@@ -16,3 +16,6 @@ listener.CaptureCalled += (_, _) =>
 // Simulate that the session runner window has been opened and we have connected to the device
 controller.StateChanged(SessionState.Ready); 
 
+Console.WriteLine("Press any key to exit");
+Console.ReadLine();
+Console.WriteLine("Im gone");
