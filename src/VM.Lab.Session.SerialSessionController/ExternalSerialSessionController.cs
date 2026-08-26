@@ -109,7 +109,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
 
     private void HandleCommand()
     {
-         var data = _serialPort.ReadLine();
+        var data = _serialPort.ReadLine();
         Console.WriteLine($"{nameof(ExternalSerialSessionController)} received: " + data);
         var parts = data.Split(Separator);
         int expectedParts;
@@ -163,7 +163,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
                 bool waitOk = WaitForCaptureComplete(captureTimeoutMs);
                 if (waitOk)
                 {
-                    _serialPort.WriteLine("CaptureOK");
+                    _serialPort.WriteLine("CaptureFinish");
                 }
                 else
                 {

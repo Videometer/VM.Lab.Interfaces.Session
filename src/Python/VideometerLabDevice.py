@@ -83,12 +83,12 @@ class VideometerLabDevice(object):
                     e.args = f"Maximum attempts reached. Giving up on command {command}. {''.join(e.args)}"
                     raise
         
-    def CaptureImage(self, sampleId, initials, comments, suffixByTimestamp, captureImageTimeoutSeconds):
+    def CaptureImage(self, sampleId, initials, comments, captureImageTimeoutSeconds):
         # In case the capture do not finish in time, allow for a small amount of slack to have time to read the correct
         # error message over the serial connection instead of just throwing a timeout.
         captureImageTimeoutSeconds = captureImageTimeoutSeconds + 1
-        commandWithParameters = f"Capture;{sampleId};{initials};{comments};{suffixByTimestamp};{captureImageTimeoutSeconds}";
-        self.SendCommandWithRetry(commandWithParameters, "CaptureOK", captureImageTimeoutSeconds)
+        commandWithParameters = f"Capture;{sampleId};{initials};{comments};{captureImageTimeoutSeconds}";
+        self.SendCommandWithRetry(commandWithParameters, "CaptureFinish", captureImageTimeoutSeconds)
                 
     def WaitForAnalysisComplete(self, analysisTimeoutSeconds):
         # In case the analysis do not finish in time, allow for a small amount of slack to have time to read the correct
