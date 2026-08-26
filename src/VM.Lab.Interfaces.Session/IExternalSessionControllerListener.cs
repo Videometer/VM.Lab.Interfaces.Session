@@ -14,7 +14,10 @@ public interface IExternalSessionControllerListener
     /// Clears the GUI and makes ready for a fresh analysis with results saved to new files.
     /// </summary>
     void New();
-    
+
+    /// <summary>Stops the current session or image capture</summary>
+    void Stop();
+
     /// <summary>Loads a specified light setup configuration into the device</summary>
     /// <param name="lightSetupName">The name of the light setup file to load</param>
     void LoadLightSetup(string lightSetupName);
