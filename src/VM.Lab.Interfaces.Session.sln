@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VM.Lab.Session.SerialSessio
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VM.Lab.Session.SerialSessionController_Old.TestGui", "VM.Lab.Session.SerialSessionController_Old.TestGui\VM.Lab.Session.SerialSessionController_Old.TestGui.csproj", "{6C588A8B-D3D9-410E-A5F1-BE827C965E87}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VM.Lab.Session.ExternalSerialSessionController.TestGui", "VM.Lab.Session.ExternalSerialSessionController.TestGui\VM.Lab.Session.ExternalSerialSessionController.TestGui.csproj", "{08ADD12D-E016-4B10-AD37-CBB42CC78A0A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -31,5 +33,9 @@ Global
 		{6C588A8B-D3D9-410E-A5F1-BE827C965E87}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6C588A8B-D3D9-410E-A5F1-BE827C965E87}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6C588A8B-D3D9-410E-A5F1-BE827C965E87}.Release|Any CPU.Build.0 = Release|Any CPU
+		{08ADD12D-E016-4B10-AD37-CBB42CC78A0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{08ADD12D-E016-4B10-AD37-CBB42CC78A0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{08ADD12D-E016-4B10-AD37-CBB42CC78A0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{08ADD12D-E016-4B10-AD37-CBB42CC78A0A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
