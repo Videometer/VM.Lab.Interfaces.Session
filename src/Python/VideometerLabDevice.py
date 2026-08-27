@@ -13,8 +13,6 @@ secondsToWaitBetweenInitializeRetries = 5
 sendCommandMaxRetries = 3
 # The com port to connect to. I.e. the com port that the VideometerLab instrument is connected to.
 comPort = 'COM1'
-# The time in seconds to let the com port settle after opening it, before sending the first command.
-secondsToWaitForTheComPortToSettleAfterOpening = 0.1
 
 class VideometerLabDevice(object):
     def __init__(self):
@@ -26,9 +24,7 @@ class VideometerLabDevice(object):
         self.ser = None
         
     def Initialize(self):
-        # Passing port= to the constructor already opens the port. Do not close and reopen it: that toggles
-        # the control lines, and on a virtual COM pair the resulting transition corrupts the first byte
-        # written, which the instrument then decodes as '?' and rejects as an unknown command.
+        # Passing port= to the constructor already opens the port, so there is no close and reopen here.
         self.ser = serial.Serial(self.port,
                                  self.baud,
                                  bytesize=self.databits,
@@ -37,8 +33,6 @@ class VideometerLabDevice(object):
                                  timeout=defaultReadTimeout,
                                  write_timeout=defaultWriteTimeout)
 
-        # Let the line settle before the first command, then discard anything the open itself produced.
-        time.sleep(secondsToWaitForTheComPortToSettleAfterOpening)
         self.ser.reset_input_buffer()
         self.ser.reset_output_buffer()
 
@@ -67,13 +61,22 @@ class VideometerLabDevice(object):
             self.ser.close()
 
     def SendCommand(self, command, expectedResult, readTimeout):
+        # Set the read timeout before writing, and only when it actually differs.
+        # Assigning timeout makes pyserial reconfigure the open port (SetCommTimeouts + SetCommState, which
+        # re-applies the whole DCB). Doing that straight after a write corrupts the byte still being
+        # transmitted, so the instrument receives a mangled first character and rejects the whole command.
+        # The guard matters because pyserial reconfigures on every assignment, even to the same value.
+        if self.ser.timeout != readTimeout:
+            self.ser.timeout = readTimeout
+
         try:
             self.ser.write(str.encode(command + '\n'))
+            # Wait for the command to actually leave the port before reading the response.
+            self.ser.flush()
         except:
             print(f"Failed to send command {command}.")
             raise Exception(f"Failed to send command {command}.")
-        
-        self.ser.timeout = readTimeout
+
         read = self.ser.readline().decode().strip()
         commandResponseOK = read == expectedResult
         

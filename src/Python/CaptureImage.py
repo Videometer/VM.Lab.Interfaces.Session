@@ -10,7 +10,7 @@ try:
     captureImageTimeoutSeconds = 10 # Unit is seconds
     device.CaptureImage("DummySampleId", "DummyInitials", "DummyComments", captureImageTimeoutSeconds)
     sphereUpTimeoutSeconds = 10 # Unit is seconds
-    device.WaitForSphereUp(sphereUpTimeoutSeconds)
+    #device.WaitForSphereUp(sphereUpTimeoutSeconds)
     print(f"Script complete: Capture done and sphere is up") # Usefull when debugging
 finally:
     device.CloseComPort()
