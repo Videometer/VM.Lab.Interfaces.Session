@@ -106,6 +106,12 @@ class VideometerLabDevice(object):
     def CheckIfLastImageFailed(self):
         self.SendCommandWithRetry("LastImageFailed", "False", defaultReadTimeout)
 
+    # Starts a new measurement: clears the results shown by the instrument and makes it ready for a fresh
+    # analysis, with the results saved to new files. Call this before the first sample of a new batch, so the
+    # batch does not append to the previous one's files.
+    def New(self):
+        self.SendCommandWithRetry("New", "NewMeasurementStarted", defaultReadTimeout)
+
     # Loads the named light setup into the instrument.
     # The light setup name must not contain the ';' character, as that separates the command parameters.
     def LoadLightSetup(self, lightSetupName, loadLightSetupTimeoutSeconds):

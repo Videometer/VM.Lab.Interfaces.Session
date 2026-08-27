@@ -220,7 +220,10 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
                 TryIssueCommand("stop", _listener.Stop);
                 break;
             case NewKeyWord:
-                TryIssueCommand("new measurement", _listener.New);
+                if (TryIssueCommand("new measurement", _listener.New))
+                {
+                    _serialPort.WriteLine("NewMeasurementStarted");
+                }
                 break;
             case AcknowledgeAdjustingLightSetupFailedKeyWord:
                 if (TryIssueCommand(
