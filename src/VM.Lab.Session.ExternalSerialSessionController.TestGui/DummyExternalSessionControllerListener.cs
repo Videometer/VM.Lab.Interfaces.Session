@@ -6,8 +6,11 @@ public class DummyExternalSessionControllerListener : IExternalSessionController
 {
     public event EventHandler CaptureCalled;
     
+    public event EventHandler LightSetupAdjusted;
+    
     public void Capture(string id, string initials, string comments)
     {
+        Console.WriteLine($"{nameof(Capture)} was called.");
         CaptureCalled?.Invoke(this, EventArgs.Empty);
     }
 
@@ -24,16 +27,19 @@ public class DummyExternalSessionControllerListener : IExternalSessionController
     public void LoadLightSetup(string lightSetupName)
     {
         Console.WriteLine($"{nameof(LoadLightSetup)} was called.");
+        LightSetupAdjusted?.Invoke(this, EventArgs.Empty);
     }
 
     public void SaveLightSetup(string lightSetupName)
     {
         Console.WriteLine($"{nameof(SaveLightSetup)} was called.");
+        LightSetupAdjusted?.Invoke(this, EventArgs.Empty);
     }
 
     public void DoAutoLight()
     {
         Console.WriteLine($"{nameof(DoAutoLight)} was called.");
+        LightSetupAdjusted?.Invoke(this, EventArgs.Empty);
     }
 
     public void AcknowledgeAdjustingLightSetupFailed()

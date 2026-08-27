@@ -25,6 +25,12 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     private const string SaveLightSetupKeyWord = "SaveLightSetup";
     private const string DoAutoLightKeyWord = "DoAutoLight";
     private const string AcknowledgeAdjustingLightSetupFailedKeyWord = "AcknowledgeAdjustingLightSetupFailed";
+
+    /// <summary>
+    /// Prefix on every response that reports the outcome of a command we did receive and understand.
+    /// It tells the caller not to send the command again, because doing so would only repeat the outcome.
+    /// </summary>
+    private const string CommandFailedPrefix = "FAILED: ";
     private ISphereHeightProvider _sphereHeightProvider;
     private readonly object _stateLock = new object();
     private bool _lastImageFailed;
@@ -202,18 +208,15 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
                 }
 
                 var captureTimeoutMs = captureTimeoutSeconds * 1000;
-                bool waitOk = WaitForCaptureComplete(captureTimeoutMs);
-                if (waitOk)
+                var captureFailureReason = WaitForCaptureComplete(captureTimeoutMs);
+                if (captureFailureReason == null)
                 {
                     _serialPort.WriteLine("CaptureFinish");
                 }
                 else
                 {
-                    var message = $"Failed waiting for capture to finish. Waited {captureTimeoutMs}ms.";
-                    Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{nameof(WaitForCaptureComplete)}: {message}");
-                    _serialPort.WriteLine(message);
+                    WriteCommandFailed(captureFailureReason);
                 }
-                
                 break;
             }
             case StopKeyWord:
@@ -244,16 +247,14 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
                     return;
                 }
                 var analysisTimeoutMs = analysisTimeoutSeconds * 1000;
-                bool waitOk = WaitForAnalysisToComplete(analysisTimeoutMs);
-                if (waitOk)
+                var analysisFailureReason = WaitForAnalysisToComplete(analysisTimeoutMs);
+                if (analysisFailureReason == null)
                 {
                     _serialPort.WriteLine("AnalysisComplete");
                 }
                 else
                 {
-                    var message = $"Failed waiting for analysis to finish. Waited {analysisTimeoutMs}ms.";
-                    Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{nameof(WaitForAnalysisToComplete)}: {message}");
-                    _serialPort.WriteLine(message);
+                    WriteCommandFailed(analysisFailureReason);
                 }
                 break;
             }
@@ -296,7 +297,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
                 {
                     var message = $"Failed waiting for sphere to move up. Waited {sphereUpTimeoutMs}ms.";
                     Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{WaitForSphereUpKeyWord}: {message}");
-                    _serialPort.WriteLine(message);
+                    WriteCommandFailed(message);
                 }
                 else
                 {
@@ -341,8 +342,16 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
             }
             case LastImageFailedKeyWord:
             {
-                var answer = _lastImageFailed ? $"True: {_lastErrorMessage}" : "False";
-                _serialPort.WriteLine(answer);
+                // "The last image failed" is a settled answer, so it carries the prefix: asking again would
+                // only get the same answer.
+                if (_lastImageFailed)
+                {
+                    WriteCommandFailed($"The last image failed: {_lastErrorMessage}");
+                }
+                else
+                {
+                    _serialPort.WriteLine("False");
+                }
                 break;
             }
             case GetLastErrorMessageKeyWord:
@@ -371,10 +380,13 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
         {
             var refused = $"Could not start {what}: {ex.Message}";
             Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{nameof(TryIssueCommand)}: {refused}");
-            _serialPort.WriteLine(refused);
+            WriteCommandFailed(refused);
             return false;
         }
     }
+
+    /// <summary>Answers a command whose outcome is settled, so the caller knows not to send it again.</summary>
+    private void WriteCommandFailed(string reason) => _serialPort.WriteLine(CommandFailedPrefix + reason);
 
     private bool ParseTimeout(string timeoutToParse, string timeoutType, out int timeout)
     {
@@ -438,27 +450,26 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
         }
 
         var timeoutMs = timeoutSeconds * 1000;
-        if (WaitFor(_lightSetupAdjustmentComplete, timeoutMs, what, nameof(HandleLightSetupCommand)))
+        var failureReason = WaitFor(_lightSetupAdjustmentComplete, timeoutMs, what, nameof(HandleLightSetupCommand));
+        if (failureReason == null)
         {
             _serialPort.WriteLine(successResponse);
         }
         else
         {
-            var message = $"Failed waiting for {what} to finish. Waited {timeoutMs}ms.";
-            Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{nameof(HandleLightSetupCommand)}: {message}");
-            _serialPort.WriteLine(message);
+            WriteCommandFailed(failureReason);
         }
     }
 
-    private bool WaitForAnalysisToComplete(int timeoutMs) =>
+    private string WaitForAnalysisToComplete(int timeoutMs) =>
         WaitFor(_analysisComplete, timeoutMs, "analysis to complete", nameof(WaitForAnalysisToComplete));
 
-    private bool WaitForCaptureComplete(int timeoutMs) =>
+    private string WaitForCaptureComplete(int timeoutMs) =>
         WaitFor(_captureComplete, timeoutMs, "capture to complete", nameof(WaitForCaptureComplete));
 
     /// <summary>
     /// Blocks until <paramref name="completed"/> is signaled — by <see cref="StateChanged"/> on success, or by
-    /// <see cref="ProvideErrorMessage"/> on failure — and reports whether the step actually succeeded.
+    /// <see cref="ProvideErrorMessage"/> on failure.
     /// <para>
     /// Waiting on the event rather than polling the state matters for correctness, not just for efficiency:
     /// the session can pass through a state faster than a poll loop can observe it — a capture from a folder
@@ -466,31 +477,35 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     /// signaled event is still signaled whenever we get round to waiting on it.
     /// </para>
     /// <para>
-    /// A failure counts as finished, so the wait ends promptly and returns false with the reason, instead of
-    /// running out the whole timeout waiting for a state that is never coming. That matters most for a failed
-    /// light setup adjustment: the session stays in AdjustingLightSetupFailed until it is acknowledged, so no
-    /// further state change would ever arrive.
+    /// A failure counts as finished, so the wait ends promptly with the reason instead of running out the whole
+    /// timeout waiting for a state that is never coming. That matters most for a failed light setup
+    /// adjustment: the session stays in AdjustingLightSetupFailed until it is acknowledged, so no further
+    /// state change would ever arrive.
     /// </para>
     /// </summary>
-    private bool WaitFor(ManualResetEventSlim completed, int timeoutMs, string what, string caller)
+    /// <returns>
+    /// Null when the step completed successfully, otherwise why it did not.
+    /// Timing out and failing are reported separately.
+    /// </returns>
+    private string WaitFor(ManualResetEventSlim completed, int timeoutMs, string what, string caller)
     {
         if (!completed.Wait(timeoutMs))
         {
-            Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{caller}: " +
-                              $"Timed out after {timeoutMs}ms waiting for {what}. Session state is {_state}.");
-            return false;
+            var timedOut = $"Timed out after {timeoutMs}ms waiting for {what}. Session state is {_state}.";
+            Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{caller}: {timedOut}");
+            return timedOut;
         }
 
         lock (_stateLock)
         {
             if (!_lastImageFailed)
             {
-                return true;
+                return null;
             }
 
-            Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{caller}: " +
-                              $"Waited for {what}, but it failed: {_lastErrorMessage}");
-            return false;
+            var failed = $"Waited for {what}, but it failed: {_lastErrorMessage}";
+            Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{caller}: {failed}");
+            return failed;
         }
     }
     

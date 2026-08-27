@@ -13,6 +13,19 @@ secondsToWaitBetweenInitializeRetries = 5
 sendCommandMaxRetries = 3
 # The com port to connect to. I.e. the com port that the VideometerLab instrument is connected to.
 comPort = 'COM1'
+# The prefix the instrument puts on a response that reports the outcome of a command it did receive and
+# understand. Such a command is not retried, because sending it again would only repeat the outcome.
+# Matched without the trailing space the instrument sends, so the space stays cosmetic.
+commandFailedPrefix = 'FAILED:'
+
+class VideometerLabCommandFailed(Exception):
+    """
+    Raised when the instrument reports the outcome of a command it did receive and understand, and that
+    outcome is not success. The command is not retried, because sending it again would only repeat the outcome.
+    Recognised by the commandFailedPrefix on the response, so that this is kept apart from the instrument
+    answering that it could not read what arrived — which can be link noise, and is retried.
+    """
+
 
 class VideometerLabDevice(object):
     def __init__(self):
@@ -78,14 +91,24 @@ class VideometerLabDevice(object):
             raise Exception(f"Failed to send command {command}.")
 
         read = self.ser.readline().decode().strip()
-        commandResponseOK = read == expectedResult
-        
-        if commandResponseOK == False:
+
+        if read == expectedResult:
+            return
+
+        if read == "":
+            error_message = f"No response from command {command} within {readTimeout} seconds."
+        else:
             error_message = f"Failed to get expected response from command {command}. Expected {expectedResult}, but received {read}."
-            error_message_joined = ''.join(error_message)
-            print(error_message_joined)
-            error_message_string = ''.join(map(str, error_message))
-            raise Exception("{}".format(error_message))
+        print(error_message)
+
+        if read.startswith(commandFailedPrefix):
+            # The instrument received and understood the command and is reporting its outcome, so there iscl
+            # nothing to gain by sending it again.
+            raise VideometerLabCommandFailed(error_message)
+
+        # Either nothing came back within the timeout, or the instrument answered that it could not read what
+        # arrived. Both can be caused by noise on the link, so the command is worth another attempt.
+        raise Exception(error_message)
 
     def SendCommandWithRetry(self, command, expectedResult, readTimeout, maxAttempts=sendCommandMaxRetries):
         attempt = 0
@@ -93,6 +116,9 @@ class VideometerLabDevice(object):
             try:
                 self.SendCommand(command, expectedResult, readTimeout)
                 return  # Command succeeded, no need to retry
+            except VideometerLabCommandFailed:
+                # The instrument gave a definite answer, so do not send the command again.
+                raise
             except Exception as e:
                 attempt += 1
                 if attempt < maxAttempts:
@@ -101,7 +127,7 @@ class VideometerLabDevice(object):
                     print(f"Maximum attempts reached. Giving up on command {command}.")
                     e.args = f"Maximum attempts reached. Giving up on command {command}. {''.join(e.args)}"
                     raise
-        
+
     def CaptureImage(self, sampleId, initials, comments, captureImageTimeoutSeconds):
         # In case the capture do not finish in time, allow for a small amount of slack to have time to read the correct
         # error message over the serial connection instead of just throwing a timeout.
