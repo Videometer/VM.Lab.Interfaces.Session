@@ -25,6 +25,8 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     private readonly object _stateLock = new object();
     private bool _lastImageFailed;
     private string _lastErrorMessage;
+    private readonly ManualResetEventSlim _captureComplete = new ManualResetEventSlim(false);
+    private readonly ManualResetEventSlim _analysisComplete = new ManualResetEventSlim(false);
     private bool _commandProcessingLockAcquired;
     private readonly object _commandProcessingLock = new object();
 
@@ -69,13 +71,26 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
         {
             Console.WriteLine($"In {nameof(ExternalSerialSessionController)}.{nameof(StateChanged)} to {newState}.");
             _state = newState;
-            
-            if (newState == SessionState.Capturing)
+
+            if (newState is not (SessionState.Capturing or SessionState.Error))
             {
-                // Reset as we have begun on the next image
-                _lastImageFailed = false;
-                _lastErrorMessage = null;
+                // The image capture is either completed successfully or have failed
+                _captureComplete.Set();
+
+                // Processing is the only remaining step between a captured image and a usable result,
+                // so reaching anything past it means the analysis is over.
+                if (newState != SessionState.Processing)
+                {
+                    _analysisComplete.Set();
+                }
             }
+
+            // Error is deliberately not treated as finished, even though it is the end of this image. The
+            // session reports the state change before it reports the reason (it raises the transition, then
+            // runs the state's entry action, which is what calls ProvideErrorMessage). Releasing a waiter here
+            // would let it read _lastImageFailed while it is still false and call a failed image a success.
+            // Error always recovers to Ready or Capturing, and that transition — or ProvideErrorMessage
+            // itself — releases the waiter once the reason is in place.
         }
     }
     
@@ -157,8 +172,9 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
                 {
                     return;
                 }
+                BeginCapture();
                 _listener.Capture(parts[1], parts[2], parts[3]);
-                
+
                 var captureTimeoutMs = captureTimeoutSeconds * 1000;
                 bool waitOk = WaitForCaptureComplete(captureTimeoutMs);
                 if (waitOk)
@@ -280,48 +296,62 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
         EnforceOneCommandAtATime();
     }
 
-    private bool WaitForAnalysisToComplete(int timeoutMs)
+    /// <summary>
+    /// Discards the previous image's outcome and arms both waits, ready for the Capture command about to be
+    /// issued. Must be called before the command reaches the session, or a wait could be satisfied by the
+    /// previous image.
+    /// </summary>
+    private void BeginCapture()
     {
-        bool loggedOnce = false;
-        bool stateMachineReady = false;
-        var s = Stopwatch.StartNew();
-        while (!stateMachineReady && s.ElapsedMilliseconds < timeoutMs)
+        lock (_stateLock)
         {
-            lock (_stateLock)
-            {
-                stateMachineReady = _state is SessionState.Waiting or SessionState.Ready;
-                if (!stateMachineReady && !loggedOnce)
-                {
-                    loggedOnce = true;
-                    Console.WriteLine(
-                        $"{nameof(ExternalSerialSessionController)}:{nameof(WaitForAnalysisToComplete)}: Not ready for next sample as state machine state was " +
-                        $"{_state} but must be {SessionState.Waiting} or {SessionState.Ready}.");
-                }
-            }
+            _lastImageFailed = false;
+            _lastErrorMessage = null;
+            _captureComplete.Reset();
+            _analysisComplete.Reset();
         }
-
-        return stateMachineReady;
     }
-    
-    private bool WaitForCaptureComplete(int timeoutMs)
+
+    private bool WaitForAnalysisToComplete(int timeoutMs) =>
+        WaitFor(_analysisComplete, timeoutMs, "analysis to complete", nameof(WaitForAnalysisToComplete));
+
+    private bool WaitForCaptureComplete(int timeoutMs) =>
+        WaitFor(_captureComplete, timeoutMs, "capture to complete", nameof(WaitForCaptureComplete));
+
+    /// <summary>
+    /// Blocks until <paramref name="completed"/> is signaled by <see cref="StateChanged"/>, and reports
+    /// whether the step actually succeeded.
+    /// <para>
+    /// Waiting on the event rather than polling the state matters for correctness, not just for efficiency:
+    /// the session can pass through a state faster than a poll loop can observe it — a capture from a folder
+    /// or a cached device can run all the way back to Ready before <c>Capture</c> even returns — whereas a
+    /// signaled event is still signaled whenever we get round to waiting on it.
+    /// </para>
+    /// <para>
+    /// A failed image counts as finished, so the wait ends promptly and returns false with the reason,
+    /// instead of running out the whole timeout waiting for a state that is never coming.
+    /// </para>
+    /// </summary>
+    private bool WaitFor(ManualResetEventSlim completed, int timeoutMs, string what, string caller)
     {
-        bool loggedOnce = false;
-        bool stateMachineReady = false;
-        var s = Stopwatch.StartNew();
-        while (!stateMachineReady && s.ElapsedMilliseconds < timeoutMs)
+        if (!completed.Wait(timeoutMs))
         {
-            lock (_stateLock)
-            {
-                stateMachineReady = _state is SessionState.Processing;
-                if (!stateMachineReady && !loggedOnce)
-                {
-                    loggedOnce = true;
-                    Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{nameof(WaitForCaptureComplete)}: Waiting for capture to complete.");
-                }
-            }
+            Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{caller}: " +
+                              $"Timed out after {timeoutMs}ms waiting for {what}. Session state is {_state}.");
+            return false;
         }
 
-        return stateMachineReady;
+        lock (_stateLock)
+        {
+            if (!_lastImageFailed)
+            {
+                return true;
+            }
+
+            Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{caller}: " +
+                              $"Waited for {what}, but the image failed: {_lastErrorMessage}");
+            return false;
+        }
     }
     
     /// <summary>
@@ -332,8 +362,16 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     /// <param name="errorMessage">Error message explaining what failed</param>
     public override void ProvideErrorMessage(string errorMessage)
     {
-        _lastImageFailed = true;
-        _lastErrorMessage = errorMessage;
+        lock (_stateLock)
+        {
+            _lastImageFailed = true;
+            _lastErrorMessage = errorMessage;
+
+            // This image is finished so release anyone waiting on it.
+            // Set after the reason is recorded, so a released waiter is guaranteed to see it.
+            _captureComplete.Set();
+            _analysisComplete.Set();
+        }
     }
     
     /// <summary>
@@ -351,5 +389,11 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     {
         _serialPort.DataReceived -= SerialPort_DataReceived;
         _serialPort?.Dispose();
+
+        // Release anyone still blocked before disposing, so the wait ends rather than throwing.
+        _captureComplete.Set();
+        _analysisComplete.Set();
+        _captureComplete.Dispose();
+        _analysisComplete.Dispose();
     }
 }
