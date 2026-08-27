@@ -7,7 +7,10 @@ from VideometerLabDevice import VideometerLabDevice
 # Follow this with SaveLightSetup if the result is to be kept for later use.
 
 device = VideometerLabDevice()
-device.Initialize()
-autoLightTimeoutSeconds = 30 # Unit is seconds
-device.DoAutoLight(autoLightTimeoutSeconds)
-print(f"Script complete: Auto light done and the found light setup is in use") # Usefull when debugging
+try:
+    device.Initialize()
+    autoLightTimeoutSeconds = 30 # Unit is seconds
+    device.DoAutoLight(autoLightTimeoutSeconds)
+    print(f"Script complete: Auto light done and the found light setup is in use") # Usefull when debugging
+finally:
+    device.CloseComPort()

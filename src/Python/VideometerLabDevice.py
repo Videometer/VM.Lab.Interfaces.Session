@@ -13,6 +13,8 @@ secondsToWaitBetweenInitializeRetries = 5
 sendCommandMaxRetries = 3
 # The com port to connect to. I.e. the com port that the VideometerLab instrument is connected to.
 comPort = 'COM1'
+# The time in seconds to let the com port settle after opening it, before sending the first command.
+secondsToWaitForTheComPortToSettleAfterOpening = 0.1
 
 class VideometerLabDevice(object):
     def __init__(self):
@@ -24,6 +26,9 @@ class VideometerLabDevice(object):
         self.ser = None
         
     def Initialize(self):
+        # Passing port= to the constructor already opens the port. Do not close and reopen it: that toggles
+        # the control lines, and on a virtual COM pair the resulting transition corrupts the first byte
+        # written, which the instrument then decodes as '?' and rejects as an unknown command.
         self.ser = serial.Serial(self.port,
                                  self.baud,
                                  bytesize=self.databits,
@@ -31,12 +36,12 @@ class VideometerLabDevice(object):
                                  stopbits=self.stopbits,
                                  timeout=defaultReadTimeout,
                                  write_timeout=defaultWriteTimeout)
-        self.ser.close()
-        self.ser.open()
-        
+
+        # Let the line settle before the first command, then discard anything the open itself produced.
+        time.sleep(secondsToWaitForTheComPortToSettleAfterOpening)
         self.ser.reset_input_buffer()
-        self.ser.reset_output_buffer()       
-        
+        self.ser.reset_output_buffer()
+
         nFailes = 0
         while nFailes < initializeRetries:
             try:
@@ -49,7 +54,18 @@ class VideometerLabDevice(object):
                 time.sleep(secondsToWaitBetweenInitializeRetries)
         
         raise Exception("Failed to connect to the VideometerLab instrument.")
-        
+
+    # Closes the com port. Call this when done with the instrument, ideally from a finally block so it also
+    # runs when a command fails.
+    # Leaving it to the garbage collector instead fails: it finalizes the port during interpreter shutdown,
+    # after the modules pyserial needs have been torn down, which prints
+    # "Exception ignored while finalizing file Serial<...>: TypeError: 'NoneType' object is not callable".
+    # It also leaves the moment the port closes up to chance, which makes the next script's open more likely
+    # to corrupt its first byte.
+    def CloseComPort(self):
+        if self.ser is not None and self.ser.is_open:
+            self.ser.close()
+
     def SendCommand(self, command, expectedResult, readTimeout):
         try:
             self.ser.write(str.encode(command + '\n'))

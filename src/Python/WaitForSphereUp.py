@@ -4,7 +4,10 @@ from VideometerLabDevice import VideometerLabDevice
 # Use this script to ensure the sphere have moved up before having the robot present the first sample under the VideometerLab sphere
 
 device = VideometerLabDevice()
-device.Initialize()
-sphereUpTimeoutSeconds = 15 # Unit is seconds
-device.WaitForSphereUp(sphereUpTimeoutSeconds)
-print(f"Script complete: Sphere is up") # Usefull when debugging
+try:
+    device.Initialize()
+    sphereUpTimeoutSeconds = 15 # Unit is seconds
+    device.WaitForSphereUp(sphereUpTimeoutSeconds)
+    print(f"Script complete: Sphere is up") # Usefull when debugging
+finally:
+    device.CloseComPort()

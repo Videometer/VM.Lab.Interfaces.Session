@@ -5,6 +5,9 @@ from VideometerLabDevice import VideometerLabDevice
 # Run this before the first sample of a new batch, so the batch does not append to the previous one's files.
 
 device = VideometerLabDevice()
-device.Initialize()
-device.New()
-print(f"Script complete: A new measurement is started") # Usefull when debugging
+try:
+    device.Initialize()
+    device.New()
+    print(f"Script complete: A new measurement is started") # Usefull when debugging
+finally:
+    device.CloseComPort()

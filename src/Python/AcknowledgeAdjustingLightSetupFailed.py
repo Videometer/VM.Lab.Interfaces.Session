@@ -6,6 +6,9 @@ from VideometerLabDevice import VideometerLabDevice
 # Run this only once the reason for the failure has been dealt with.
 
 device = VideometerLabDevice()
-device.Initialize()
-device.AcknowledgeAdjustingLightSetupFailed()
-print(f"Script complete: The failed light setup adjustment is acknowledged") # Usefull when debugging
+try:
+    device.Initialize()
+    device.AcknowledgeAdjustingLightSetupFailed()
+    print(f"Script complete: The failed light setup adjustment is acknowledged") # Usefull when debugging
+finally:
+    device.CloseComPort()

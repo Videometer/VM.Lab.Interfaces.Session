@@ -7,7 +7,10 @@ from VideometerLabDevice import VideometerLabDevice
 lightSetupName = "DummyLightSetup"
 
 device = VideometerLabDevice()
-device.Initialize()
-loadLightSetupTimeoutSeconds = 5 # Unit is seconds
-device.LoadLightSetup(lightSetupName, loadLightSetupTimeoutSeconds)
-print(f"Script complete: Light setup {lightSetupName} is loaded") # Usefull when debugging
+try:
+    device.Initialize()
+    loadLightSetupTimeoutSeconds = 5 # Unit is seconds
+    device.LoadLightSetup(lightSetupName, loadLightSetupTimeoutSeconds)
+    print(f"Script complete: Light setup {lightSetupName} is loaded") # Usefull when debugging
+finally:
+    device.CloseComPort()
