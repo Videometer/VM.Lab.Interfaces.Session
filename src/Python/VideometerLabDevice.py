@@ -126,7 +126,7 @@ class VideometerLabDevice(object):
 
     # Clears a failed light setup adjustment so the instrument accepts commands again.
     # A failed LoadLightSetup, SaveLightSetup or DoAutoLight leaves the instrument refusing further commands
-    # until this is called, so that a light setup that did not take effect cannot be captured with unnoticed.
+    # until this is called, so images cannot go on being captured without the light setup that never took effect.
     def AcknowledgeAdjustingLightSetupFailed(self):
         self.SendCommandWithRetry("AcknowledgeAdjustingLightSetupFailed", "AdjustingLightSetupFailedAcknowledged",
                                   defaultReadTimeout)
