@@ -393,6 +393,11 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     /// Discards the previous image's outcome and arms both waits, ready for the Capture command about to be
     /// issued. Must be called before the command reaches the session, or a wait could be satisfied by the
     /// previous image.
+    /// <para>
+    /// Driven by the command rather than by the session entering <see cref="SessionState.Capturing"/>. When
+    /// capturing continuously, the session enters that state by itself, straight out of Error — which would
+    /// discard the very failure being reported and re-arm an event a waiter is already blocked on.
+    /// </para>
     /// </summary>
     private void CaptureIsAboutToBeCalled()
     {
@@ -416,7 +421,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     private void HandleLightSetupCommand(string what, Action command, int timeoutSeconds, string successResponse)
     {
         // Discard the previous outcome and arm the wait. Per command rather than on entry to
-        // AdjustingLightSetup, for the same reason as BeginCapture.
+        // AdjustingLightSetup, for the same reason as in CaptureIsAboutToBeCalled.
         lock (_stateLock)
         {
             _lastImageFailed = false;
@@ -449,8 +454,8 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
         WaitFor(_captureComplete, timeoutMs, "capture to complete", nameof(WaitForCaptureComplete));
 
     /// <summary>
-    /// Blocks until <paramref name="completed"/> is signaled by <see cref="StateChanged"/>, and reports
-    /// whether the step actually succeeded.
+    /// Blocks until <paramref name="completed"/> is signaled — by <see cref="StateChanged"/> on success, or by
+    /// <see cref="ProvideErrorMessage"/> on failure — and reports whether the step actually succeeded.
     /// <para>
     /// Waiting on the event rather than polling the state matters for correctness, not just for efficiency:
     /// the session can pass through a state faster than a poll loop can observe it — a capture from a folder
@@ -458,8 +463,10 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     /// signaled event is still signaled whenever we get round to waiting on it.
     /// </para>
     /// <para>
-    /// A failed image counts as finished, so the wait ends promptly and returns false with the reason,
-    /// instead of running out the whole timeout waiting for a state that is never coming.
+    /// A failure counts as finished, so the wait ends promptly and returns false with the reason, instead of
+    /// running out the whole timeout waiting for a state that is never coming. That matters most for a failed
+    /// light setup adjustment: the session stays in AdjustingLightSetupFailed until it is acknowledged, so no
+    /// further state change would ever arrive.
     /// </para>
     /// </summary>
     private bool WaitFor(ManualResetEventSlim completed, int timeoutMs, string what, string caller)
@@ -497,8 +504,8 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
             _lastImageFailed = true;
             _lastErrorMessage = errorMessage;
 
-            // This image is finished so release anyone waiting on it.
-            // Set after the reason is recorded, so a released waiter is guaranteed to see it.
+            // Whatever was in flight is finished, so release anyone waiting on it — an image, or a light setup
+            // adjustment. Set after the reason is recorded, so a released waiter is guaranteed to see it.
             _captureComplete.Set();
             _analysisComplete.Set();
             _lightSetupAdjustmentComplete.Set();
