@@ -105,5 +105,32 @@ class VideometerLabDevice(object):
     # If the analysis of the last image failed then an error message with detailes is thrown as an exception
     def CheckIfLastImageFailed(self):
         self.SendCommandWithRetry("LastImageFailed", "False", defaultReadTimeout)
+
+    # Loads the named light setup into the instrument.
+    # The light setup name must not contain the ';' character, as that separates the command parameters.
+    def LoadLightSetup(self, lightSetupName, loadLightSetupTimeoutSeconds):
+        # In case the load do not finish in time, allow for a small amount of slack to have time to read the correct
+        # error message over the serial connection instead of just throwing a timeout.
+        loadLightSetupTimeoutSeconds = loadLightSetupTimeoutSeconds + 1
+        commandWithParameters = f"LoadLightSetup;{lightSetupName};{loadLightSetupTimeoutSeconds}";
+        self.SendCommandWithRetry(commandWithParameters, "LightSetupLoaded", loadLightSetupTimeoutSeconds)
+
+    # Saves the light setup currently used by the instrument under the given name.
+    # The light setup name must not contain the ';' character, as that separates the command parameters.
+    def SaveLightSetup(self, lightSetupName, saveLightSetupTimeoutSeconds):
+        # In case the save do not finish in time, allow for a small amount of slack to have time to read the correct
+        # error message over the serial connection instead of just throwing a timeout.
+        saveLightSetupTimeoutSeconds = saveLightSetupTimeoutSeconds + 1
+        commandWithParameters = f"SaveLightSetup;{lightSetupName};{saveLightSetupTimeoutSeconds}";
+        self.SendCommandWithRetry(commandWithParameters, "LightSetupSaved", saveLightSetupTimeoutSeconds)
+
+    # Optimizes the light setup for the sample currently placed under the sphere, and applies the result.
+    # Place the sample before calling this, as the optimization measures it.
+    def DoAutoLight(self, autoLightTimeoutSeconds):
+        # In case the auto light do not finish in time, allow for a small amount of slack to have time to read the
+        # correct error message over the serial connection instead of just throwing a timeout.
+        autoLightTimeoutSeconds = autoLightTimeoutSeconds + 1
+        commandWithParameters = f"DoAutoLight;{autoLightTimeoutSeconds}";
+        self.SendCommandWithRetry(commandWithParameters, "AutoLightComplete", autoLightTimeoutSeconds)
         
         
