@@ -8,7 +8,7 @@ namespace VM.Lab.Session.SerialSessionController;
 /// Concrete implementation of an external session controller that is controlled by an external device that
 /// communicates with this controller using serial communication over a COM port. 
 /// </summary>
-public class ExternalSerialSessionController : ExternalSessionController, INeedSphereHeightProvider, IDisposable
+public class ExternalSerialSessionController : ExternalSessionController, INeedSphereHeightProvider
 {
     private readonly SerialPort _serialPort;
     private SessionState _state;
@@ -541,7 +541,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     }
 
     /// <summary>Clean up internally used resources</summary>
-    public void Dispose()
+    public override void Dispose()
     {
         _serialPort.DataReceived -= SerialPort_DataReceived;
         _serialPort?.Dispose();

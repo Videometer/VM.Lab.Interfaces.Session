@@ -1,7 +1,7 @@
 ﻿namespace VM.Lab.Interfaces.Session;
 
 /// <summary>Implement this to be an agent that controls sessions</summary>
-public abstract class ExternalSessionController
+public abstract class ExternalSessionController : IDisposable
 {
     /// <summary>Implementer of session control commands</summary>
     protected readonly IExternalSessionControllerListener _listener;
@@ -24,4 +24,9 @@ public abstract class ExternalSessionController
     /// </summary>
     /// <param name="errorMessage">Error message explaining what failed</param>
     public abstract void ProvideErrorMessage(string errorMessage);
+
+    /// <summary>Clean up internally used resources</summary>
+    public virtual void Dispose()
+    {
+    }
 }
