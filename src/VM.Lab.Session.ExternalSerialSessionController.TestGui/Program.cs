@@ -13,6 +13,8 @@ listener.CaptureCalled += (_, _) =>
     controller.StateChanged(SessionState.Ready);
 };
 
+controller.ProvideSphereHeightProvider(new DummySphereHeightProvider());
+
 // Simulate that the session runner window has been opened and we have connected to the device
 controller.StateChanged(SessionState.Ready); 
 

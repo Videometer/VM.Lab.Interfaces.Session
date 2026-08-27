@@ -222,6 +222,12 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
             }
             case WaitForSphereUpKeyWord:
             {
+                if (_sphereHeightProvider is null)
+                {
+                    throw new InvalidOperationException(
+                        $"{nameof(ExternalSerialSessionController)}:{nameof(WaitForSphereUpKeyWord)}: Sphere height provider was not provided.");
+                }
+                
                 var parseOk = ParseTimeout(parts[1], "sphere up", out var sphereUpTimeoutSeconds);
                 if (!parseOk)
                 {
