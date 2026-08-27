@@ -24,6 +24,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     private const string LoadLightSetupKeyWord = "LoadLightSetup";
     private const string SaveLightSetupKeyWord = "SaveLightSetup";
     private const string DoAutoLightKeyWord = "DoAutoLight";
+    private const string AcknowledgeAdjustingLightSetupFailedKeyWord = "AcknowledgeAdjustingLightSetupFailed";
     private ISphereHeightProvider _sphereHeightProvider;
     private readonly object _stateLock = new object();
     private bool _lastImageFailed;
@@ -46,7 +47,8 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
         GetLastErrorMessageKeyWord,
         LoadLightSetupKeyWord,
         SaveLightSetupKeyWord,
-        DoAutoLightKeyWord
+        DoAutoLightKeyWord,
+        AcknowledgeAdjustingLightSetupFailedKeyWord
     };
 
     /// <summary>
@@ -162,6 +164,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
             case CheckConnectionKeyWord:
             case LastImageFailedKeyWord:
             case GetLastErrorMessageKeyWord:
+            case AcknowledgeAdjustingLightSetupFailedKeyWord:
                 expectedParts = 1;
                 break;
             default:
@@ -218,6 +221,14 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
                 break;
             case NewKeyWord:
                 TryIssueCommand("new measurement", _listener.New);
+                break;
+            case AcknowledgeAdjustingLightSetupFailedKeyWord:
+                if (TryIssueCommand(
+                        "acknowledgement of the failed light setup adjustment",
+                        _listener.AcknowledgeAdjustingLightSetupFailed))
+                {
+                    _serialPort.WriteLine("AdjustingLightSetupFailedAcknowledged");
+                }
                 break;
             case CheckConnectionKeyWord:
                 _serialPort.WriteLine("ConnectionOK");

@@ -28,4 +28,13 @@ public interface IExternalSessionControllerListener
 
     /// <summary>Automatically adjusts the light setup to optimize imaging conditions</summary>
     void DoAutoLight();
+
+    /// <summary>
+    /// Acknowledge a failed light setup adjustment.
+    /// The session itself does not clear a failed light setup adjustment: it leaves the session in
+    /// <see cref="SessionState.AdjustingLightSetupFailed"/>, where it refuses further commands,
+    /// until the controller that issued the adjustment acknowledges the failure.
+    /// That way the external controller cannot continue to capture images without being aware of the light setup adjustment failer
+    /// </summary>
+    void AcknowledgeAdjustingLightSetupFailed();
 }

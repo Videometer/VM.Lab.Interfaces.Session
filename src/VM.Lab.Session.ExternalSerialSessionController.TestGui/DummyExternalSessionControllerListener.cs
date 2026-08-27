@@ -35,4 +35,9 @@ public class DummyExternalSessionControllerListener : IExternalSessionController
     {
         Console.WriteLine($"{nameof(DoAutoLight)} was called.");
     }
+
+    public void AcknowledgeAdjustingLightSetupFailed()
+    {
+        Console.WriteLine($"{nameof(AcknowledgeAdjustingLightSetupFailed)} was called.");
+    }
 }

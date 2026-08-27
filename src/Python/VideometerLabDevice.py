@@ -124,6 +124,13 @@ class VideometerLabDevice(object):
         commandWithParameters = f"SaveLightSetup;{lightSetupName};{saveLightSetupTimeoutSeconds}";
         self.SendCommandWithRetry(commandWithParameters, "LightSetupSaved", saveLightSetupTimeoutSeconds)
 
+    # Clears a failed light setup adjustment so the instrument accepts commands again.
+    # A failed LoadLightSetup, SaveLightSetup or DoAutoLight leaves the instrument refusing further commands
+    # until this is called, so that a light setup that did not take effect cannot be captured with unnoticed.
+    def AcknowledgeAdjustingLightSetupFailed(self):
+        self.SendCommandWithRetry("AcknowledgeAdjustingLightSetupFailed", "AdjustingLightSetupFailedAcknowledged",
+                                  defaultReadTimeout)
+
     # Optimizes the light setup for the sample currently placed under the sphere, and applies the result.
     # Place the sample before calling this, as the optimization measures it.
     def DoAutoLight(self, autoLightTimeoutSeconds):
