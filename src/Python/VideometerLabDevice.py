@@ -13,6 +13,11 @@ secondsToWaitBetweenInitializeRetries = 5
 sendCommandMaxRetries = 3
 # The com port to connect to. I.e. the com port that the VideometerLab instrument is connected to.
 comPort = 'COM1'
+# How much longer than the instrument's own wait to keep reading for its response.
+# Commands that carry a timeout are answered by the instrument when that timeout runs out, so without this aditional
+# wait time the two deadlines coincide: the read can expire a moment before the answer arrives, which hides the real
+# reason and — because an empty read counts as retryable — resends the command into a session that is still busy.
+secondsToReadBeyondTheInstrumentsTimeout = 1
 # The prefix the instrument puts on a response that reports the outcome of a command it did receive and
 # understand. Such a command is not retried, because sending it again would only repeat the outcome.
 # Matched without the trailing space the instrument sends, so the space stays cosmetic.
@@ -129,23 +134,20 @@ class VideometerLabDevice(object):
                     raise
 
     def CaptureImage(self, sampleId, initials, comments, captureImageTimeoutSeconds):
-        # In case the capture do not finish in time, allow for a small amount of slack to have time to read the correct
-        # error message over the serial connection instead of just throwing a timeout.
-        captureImageTimeoutSeconds = captureImageTimeoutSeconds + 1
         commandWithParameters = f"Capture;{sampleId};{initials};{comments};{captureImageTimeoutSeconds}";
-        self.SendCommandWithRetry(commandWithParameters, "CaptureFinish", captureImageTimeoutSeconds)
-                
+        self.SendCommandWithRetry(commandWithParameters, "CaptureFinish",
+                                  captureImageTimeoutSeconds + secondsToReadBeyondTheInstrumentsTimeout)
+
     def WaitForAnalysisComplete(self, analysisTimeoutSeconds):
-        # In case the analysis do not finish in time, allow for a small amount of slack to have time to read the correct
-        # error message over the serial connection instead of just throwing a timeout.
-        analysisTimeoutSeconds = analysisTimeoutSeconds + 1 
         commandWithParameters = f"WaitForAnalysisComplete;{analysisTimeoutSeconds}";
-        self.SendCommandWithRetry(commandWithParameters, "AnalysisComplete", analysisTimeoutSeconds)
-        
-    # Returns when the sphere is up           
+        self.SendCommandWithRetry(commandWithParameters, "AnalysisComplete",
+                                  analysisTimeoutSeconds + secondsToReadBeyondTheInstrumentsTimeout)
+
+    # Returns when the sphere is up
     def WaitForSphereUp(self, sphereUpTimeoutSeconds):
         commandWithParameters = f"WaitForSphereUp;{sphereUpTimeoutSeconds}";
-        self.SendCommandWithRetry(commandWithParameters, "SphereIsUp", sphereUpTimeoutSeconds)
+        self.SendCommandWithRetry(commandWithParameters, "SphereIsUp",
+                                  sphereUpTimeoutSeconds + secondsToReadBeyondTheInstrumentsTimeout)
            
     # If the analysis of the last image failed then an error message with detailes is thrown as an exception
     def CheckIfLastImageFailed(self):
@@ -160,20 +162,16 @@ class VideometerLabDevice(object):
     # Loads the named light setup into the instrument.
     # The light setup name must not contain the ';' character, as that separates the command parameters.
     def LoadLightSetup(self, lightSetupName, loadLightSetupTimeoutSeconds):
-        # In case the load do not finish in time, allow for a small amount of slack to have time to read the correct
-        # error message over the serial connection instead of just throwing a timeout.
-        loadLightSetupTimeoutSeconds = loadLightSetupTimeoutSeconds + 1
         commandWithParameters = f"LoadLightSetup;{lightSetupName};{loadLightSetupTimeoutSeconds}";
-        self.SendCommandWithRetry(commandWithParameters, "LightSetupLoaded", loadLightSetupTimeoutSeconds)
+        self.SendCommandWithRetry(commandWithParameters, "LightSetupLoaded",
+                                  loadLightSetupTimeoutSeconds + secondsToReadBeyondTheInstrumentsTimeout)
 
     # Saves the light setup currently used by the instrument under the given name.
     # The light setup name must not contain the ';' character, as that separates the command parameters.
     def SaveLightSetup(self, lightSetupName, saveLightSetupTimeoutSeconds):
-        # In case the save do not finish in time, allow for a small amount of slack to have time to read the correct
-        # error message over the serial connection instead of just throwing a timeout.
-        saveLightSetupTimeoutSeconds = saveLightSetupTimeoutSeconds + 1
         commandWithParameters = f"SaveLightSetup;{lightSetupName};{saveLightSetupTimeoutSeconds}";
-        self.SendCommandWithRetry(commandWithParameters, "LightSetupSaved", saveLightSetupTimeoutSeconds)
+        self.SendCommandWithRetry(commandWithParameters, "LightSetupSaved",
+                                  saveLightSetupTimeoutSeconds + secondsToReadBeyondTheInstrumentsTimeout)
 
     # Clears a failed light setup adjustment so the instrument accepts commands again.
     # A failed LoadLightSetup, SaveLightSetup or DoAutoLight leaves the instrument refusing further commands
@@ -185,10 +183,8 @@ class VideometerLabDevice(object):
     # Optimizes the light setup for the sample currently placed under the sphere, and applies the result.
     # Place the sample before calling this, as the optimization measures it.
     def DoAutoLight(self, autoLightTimeoutSeconds):
-        # In case the auto light do not finish in time, allow for a small amount of slack to have time to read the
-        # correct error message over the serial connection instead of just throwing a timeout.
-        autoLightTimeoutSeconds = autoLightTimeoutSeconds + 1
         commandWithParameters = f"DoAutoLight;{autoLightTimeoutSeconds}";
-        self.SendCommandWithRetry(commandWithParameters, "AutoLightComplete", autoLightTimeoutSeconds)
+        self.SendCommandWithRetry(commandWithParameters, "AutoLightComplete",
+                                  autoLightTimeoutSeconds + secondsToReadBeyondTheInstrumentsTimeout)
         
         
