@@ -18,8 +18,7 @@ public abstract class ExternalSessionController : IDisposable
     public abstract void StateChanged(SessionState newState);
 
     /// <summary>
-    /// Called id an error happens, for example, something in the pipeline of capturing, analyzing, or saving of results, failed for the current image.
-    /// Used to inform external controllers that something went wrong. 
+    /// Called if an error happens, for example, something in the pipeline of capturing, analyzing, or saving of results, failed for the current image.
     /// Used to inform external controllers that something went wrong. 
     /// </summary>
     /// <param name="errorMessage">Error message explaining what failed</param>

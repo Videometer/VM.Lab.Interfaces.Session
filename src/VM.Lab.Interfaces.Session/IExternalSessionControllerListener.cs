@@ -18,11 +18,11 @@ public interface IExternalSessionControllerListener
     /// <summary>Stops the current session or image capture</summary>
     void Stop();
 
-    /// <summary>Loads a specified light setup configuration into the device</summary>
+    /// <summary>Loads a specified light setup into the device</summary>
     /// <param name="lightSetupName">The name of the light setup file to load</param>
     void LoadLightSetup(string lightSetupName);
 
-    /// <summary>Saves the specified light setup configuration</summary>
+    /// <summary>Saves the active light setup</summary>
     /// <param name="lightSetupName">The name of the light setup file to save</param>
     void SaveLightSetup(string lightSetupName);
 
