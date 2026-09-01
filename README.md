@@ -216,9 +216,6 @@ The diagram below slows the Session state machine. These states can be used for 
 
 ![](Session-StateMachineVisualizationGraph-01-September-2026.svg)
 
-Testing
-
-<img src="Session-StateMachineVisualizationGraph-01-September-2026.svg" width="900" alt="Session state machine">
 
 # The below is relevant for VideometerLab version 4.3 and older
 
