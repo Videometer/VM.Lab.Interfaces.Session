@@ -184,7 +184,7 @@ To make your own session controller in C# you have to make a new class and inher
 An example of this can be found in the "ExternalSerialSessionController" class.
 
 ## Setup for use of a Python controller
-To use our Python controller, you need to copy the dll "VM.Lab.Session.SerialSessionController.dll" into the VideometerLab installation folder. When you start Session you can now send commands to the VideometerLab instrument by executing the provided Python scripts.
+To use our Python controller, you need to copy the dll "VM.Lab.Session.ExternalSerialSessionController.dll" into the VideometerLab installation folder. When you start Session you can now send commands to the VideometerLab instrument by executing the provided Python scripts.
 
 Note that:
 * The Python scripts assume that the VideometerLab PC and the external PC are connected by a serial cable.
@@ -206,7 +206,7 @@ The assigned COM port number is changed using these steps:
 
 ## Setup for making your own Python controller
 You can customize our Python scripts to your liking. To make your own Session controller for Python, you can either:
-* Use the "VM.Lab.Session.SerialSessionController.dll" as provided, but modify the Python scripts to your needs.
+* Use the "VM.Lab.Session.ExternalSerialSessionController.dll" as provided, but modify the Python scripts to your needs.
 * Change the source code for the "ExternalSerialSessionController" class and modify the Python scripts to your needs.
 
 You will need to import the Python library's "serial" and "time" to modify the VideometerLabDevice class.
