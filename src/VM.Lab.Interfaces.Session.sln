@@ -9,7 +9,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionIt
 		..\README.md = ..\README.md
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VM.Lab.Session.SerialSessionController", "VM.Lab.Session.SerialSessionController\VM.Lab.Session.SerialSessionController.csproj", "{EAFD5A07-FB19-4F53-8A0D-3B911285F053}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VM.Lab.Session.ExternalSerialSessionController", "VM.Lab.Session.ExternalSerialSessionController\VM.Lab.Session.ExternalSerialSessionController.csproj", "{EAFD5A07-FB19-4F53-8A0D-3B911285F053}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VM.Lab.Session.SerialSessionController_Old.TestGui", "VM.Lab.Session.SerialSessionController_Old.TestGui\VM.Lab.Session.SerialSessionController_Old.TestGui.csproj", "{6C588A8B-D3D9-410E-A5F1-BE827C965E87}"
 EndProject

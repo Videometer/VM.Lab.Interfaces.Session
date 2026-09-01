@@ -9,7 +9,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\VM.Lab.Interfaces.Session\VM.Lab.Interfaces.Session.csproj" />
-      <ProjectReference Include="..\VM.Lab.Session.SerialSessionController\VM.Lab.Session.SerialSessionController.csproj" />
+      <ProjectReference Include="..\VM.Lab.Session.ExternalSerialSessionController\VM.Lab.Session.ExternalSerialSessionController.csproj" />
     </ItemGroup>
 
 </Project>
