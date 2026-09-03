@@ -130,7 +130,7 @@ class VideometerLabDevice(object):
                     print(f"Retrying command {command}")
                 else:
                     print(f"Maximum attempts reached. Giving up on command {command}.")
-                    e.args = f"Maximum attempts reached. Giving up on command {command}. {''.join(e.args)}"
+                    e.args = (f"Maximum attempts reached. Giving up on command {command}. {e}",)
                     raise
 
     def CaptureImage(self, sampleId, initials, comments, captureImageTimeoutSeconds):
