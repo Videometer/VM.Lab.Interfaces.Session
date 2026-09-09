@@ -40,7 +40,11 @@ if (-not (Test-Path $nupkg)) { throw "$nupkg was not produced" }
 
 $unzip = "out/unzip-$PackageId"
 if (Test-Path $unzip) { Remove-Item $unzip -Recurse -Force }
-Expand-Archive $nupkg $unzip
+# Expand-Archive refuses the .nupkg extension - same reason the on-prem template
+# copied to .zip before extracting.
+Copy-Item $nupkg "$nupkg.zip"
+Expand-Archive "$nupkg.zip" $unzip
+Remove-Item "$nupkg.zip"
 $skipDlls = @('Jai_FactoryDotNET.dll','log4net.dll','SpinnakerNET_v140.dll','FlyCapture2Managed_v100.dll','WebView2Loader.dll')
 foreach ($dll in (Get-ChildItem $unzip -Recurse -Filter *.dll)) {
     if ($skipDlls -contains $dll.Name) { continue }
