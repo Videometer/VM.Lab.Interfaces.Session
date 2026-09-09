@@ -1,19 +1,31 @@
-import jetbrains.buildServer.configs.kotlin.*
+﻿import jetbrains.buildServer.configs.kotlin.*
 import jetbrains.buildServer.configs.kotlin.buildSteps.*
 import jetbrains.buildServer.configs.kotlin.triggers.vcs
 
 /*
- * Generated 2026-09-08 as part of the Cloud migration (Platform onboarding).
- * Build and test only. Publish is added later, together with the versioning
- * decision and the feed write token - see VM.IaC docs/teamcity.md, Platform-flowet.
+ * Generated 2026-09-09 as part of the Cloud migration (Platform onboarding).
  * Restore resolves through the agent's machine config (GitHub Packages + nuget.org).
+ * Tests read shared test data straight from testroot_base via TESTDATA_INPUT_ROOT,
+ * exactly as on-prem did - nothing is copied locally.
+ *
+ * Publish is a separate configuration with a snapshot dependency on Build, so a red
+ * test run never publishes. The version is the top entry of ChangeLog.txt - the bump
+ * is the release signal (see VM.IaC docs/teamcity.md, the Platform flow section).
+ * Publishing is idempotent: .teamcity/publish.ps1 skips versions already on the feed.
  */
 
 version = "2026.1"
 
 project {
 
-    buildType {
+    params {
+        // Same test data model as on-prem: read directly from the share.
+        param("env.TESTDATA_INPUT_ROOT", """%testroot_base%\NuGet_Packages\VM.Lab.Interfaces.Session""")
+        // IPP/MKL native libraries for the packages that load them at test time.
+        param("env.Path", """%env.Path%;%testroot_base%\NuGet_Packages\IPP2021.6.2.19751\bin\intel64;%testroot_base%\NuGet_Packages\MKL2021Update1\x64""")
+    }
+
+    val build = buildType {
         id("Build")
         name = "Build"
 
@@ -47,4 +59,46 @@ project {
             equals("vmlab.role.build", "true")
         }
     }
+
+    buildType {
+        id("Publish")
+        name = "Publish"
+
+        vcs {
+            root(DslContext.settingsRoot)
+        }
+
+        params {
+            param("env.VM_FEED_TOKEN", "%vm.feed.github.token%")
+            param("env.VM_PUBLISHING_DRIVE", "%publishing_drive%")
+        }
+
+        steps {
+            powerShell {
+                name = "Publish VM.Lab.Interfaces.Session"
+                id = "PUBLISH_VMLabInterfacesSession"
+                edition = PowerShellStep.Edition.Desktop
+                formatStderrAsError = true
+                scriptMode = file { path = ".teamcity/publish.ps1" }
+                scriptArgs = "-PackageId VM.Lab.Interfaces.Session -Nuspec src/VM.Lab.Interfaces.Session.nuspec -Sln src/VM.Lab.Interfaces.Session.sln"
+            }
+        }
+
+        triggers {
+            vcs {
+            }
+        }
+
+        dependencies {
+            snapshot(build) {
+                onDependencyFailure = FailureAction.FAIL_TO_START
+                onDependencyCancel = FailureAction.CANCEL
+            }
+        }
+
+        requirements {
+            equals("vmlab.role.build", "true")
+        }
+    }
 }
+
