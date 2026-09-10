@@ -44,6 +44,7 @@ project {
                 configuration = "Release"
             }
             dotnetTest {
+                filter = "%vm.test.filter%"
                 name = "Test"
                 projects = "src/VM.Lab.Interfaces.Session.sln"
                 configuration = "Release"
