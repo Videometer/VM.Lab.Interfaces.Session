@@ -54,7 +54,6 @@ project {
 
         features {
             commitStatusPublisher {
-                vcsRootExtId = ""
                 publisher = github {
                     githubUrl = "https://api.github.com"
                     authType = vcsRoot()
