@@ -1,4 +1,5 @@
 ﻿import jetbrains.buildServer.configs.kotlin.*
+import jetbrains.buildServer.configs.kotlin.buildFeatures.commitStatusPublisher
 import jetbrains.buildServer.configs.kotlin.buildSteps.*
 import jetbrains.buildServer.configs.kotlin.triggers.vcs
 
@@ -48,6 +49,16 @@ project {
                 name = "Test"
                 projects = "src/VM.Lab.Interfaces.Session.sln"
                 configuration = "Release"
+            }
+        }
+
+        features {
+            commitStatusPublisher {
+                vcsRootExtId = ""
+                publisher = github {
+                    githubUrl = "https://api.github.com"
+                    authType = vcsRoot()
+                }
             }
         }
 
