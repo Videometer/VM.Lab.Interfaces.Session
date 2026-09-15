@@ -97,6 +97,13 @@ project {
 
         triggers {
             vcs {
+                // A PR must never publish: package versions are immutable, so a
+                // pre-merge publish burns the version with unreviewed content.
+                // PRs run Build only; Publish fires on real branches at merge.
+                branchFilter = """
+                    +:*
+                    -:*/merge
+                """.trimIndent()
             }
         }
 
