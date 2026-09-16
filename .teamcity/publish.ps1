@@ -1,4 +1,4 @@
-# Pack and push one NuGet package to GitHub Packages.
+﻿# Pack and push one NuGet package to GitHub Packages.
 # Carries the on-prem publish template's controls: the DLL version check (catches
 # failed version stamping, rejects 0.0.0) and the nupkg archive copy to the S-drive.
 # Deliberate change from on-prem: an already-published version SKIPS instead of
@@ -45,9 +45,10 @@ if (Test-Path $unzip) { Remove-Item $unzip -Recurse -Force }
 Copy-Item $nupkg "$nupkg.zip"
 Expand-Archive "$nupkg.zip" $unzip
 Remove-Item "$nupkg.zip"
-$skipDlls = @('Jai_FactoryDotNET.dll','log4net.dll','SpinnakerNET_v140.dll','FlyCapture2Managed_v100.dll','WebView2Loader.dll')
+# Version-check only our own assemblies: vendor DLLs (camera SDKs, ORiN/CaoRCW,
+# log4net, ...) carry their own versions. Same rule as the VMLab publish script.
 foreach ($dll in (Get-ChildItem $unzip -Recurse -Filter *.dll)) {
-    if ($skipDlls -contains $dll.Name) { continue }
+    if ($dll.Name -notlike 'VM.*') { continue }
     if ($dll.FullName -match 'contentFiles|runtimes|GocatorSDK') { continue }
     $fv = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($dll.FullName)
     $dllVer = "$($fv.FileMajorPart).$($fv.FileMinorPart).$($fv.FileBuildPart)"
