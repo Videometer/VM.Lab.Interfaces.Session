@@ -1,4 +1,4 @@
-﻿import jetbrains.buildServer.configs.kotlin.*
+import jetbrains.buildServer.configs.kotlin.*
 import jetbrains.buildServer.configs.kotlin.buildFeatures.commitStatusPublisher
 import jetbrains.buildServer.configs.kotlin.buildSteps.*
 import jetbrains.buildServer.configs.kotlin.triggers.vcs
@@ -28,6 +28,7 @@ project {
 
     val build = buildType {
         id("Build")
+        buildNumberPattern = "%build.counter% (%build.vcs.number%)"
         name = "Build"
 
         vcs {

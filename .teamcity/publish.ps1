@@ -1,4 +1,4 @@
-﻿# Pack and push one NuGet package to GitHub Packages.
+# Pack and push one NuGet package to GitHub Packages.
 # Carries the on-prem publish template's controls: the DLL version check (catches
 # failed version stamping, rejects 0.0.0) and the nupkg archive copy to the S-drive.
 # Deliberate change from on-prem: an already-published version SKIPS instead of
@@ -17,6 +17,22 @@ $top = Get-Content $cl | Where-Object { $_ -match '^\s*\d+(\.\d+)+\s*$' } | Sele
 if (-not $top) { throw "No version found at the top of $cl" }
 $v = $top.Trim()
 Write-Host "$PackageId version from ChangeLog: $v"
+# Surface the package version as the TeamCity build number (shows in the build line).
+Write-Host "##teamcity[buildNumber '$v']"
+
+# Changelog entry for this version (the notes under the $v header, up to the next version
+# header) - shown here in the build log, and published as an artifact on the publish path.
+$notes = @(); $inEntry = $false
+foreach ($line in (Get-Content $cl)) {
+    if ($line -match '^\s*\d+(\.\d+)+\s*$') {
+        if ($inEntry) { break }
+        if ($line.Trim() -eq $v) { $inEntry = $true }
+        continue
+    }
+    if ($inEntry) { $notes += $line }
+}
+Write-Host "----- $PackageId $v changelog -----"
+$notes | ForEach-Object { Write-Host $_ }
 
 $auth = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("oauth2:$($env:VM_FEED_TOKEN)"))
 $versions = @()
@@ -24,6 +40,10 @@ try { $versions = (Invoke-RestMethod "https://nuget.pkg.github.com/Videometer/do
 if ($versions -contains $v) { Write-Host "$v is already on the feed - nothing to publish"; exit 0 }
 
 New-Item out -ItemType Directory -Force | Out-Null
+# Publish the changelog entry for this version as a downloadable build artifact.
+$releaseNotes = "out/release-notes-$v.txt"
+Set-Content -Path $releaseNotes -Value (@("$PackageId $v", '') + $notes) -Encoding UTF8
+Write-Host "##teamcity[publishArtifacts '$releaseNotes']"
 if ($Nuspec) {
     dotnet build $Sln -c Release -p:Version=$v
     if ($LASTEXITCODE -ne 0) { throw 'build failed' }
