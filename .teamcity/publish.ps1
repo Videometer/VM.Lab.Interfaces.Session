@@ -37,7 +37,13 @@ $notes | ForEach-Object { Write-Host $_ }
 $auth = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("oauth2:$($env:VM_FEED_TOKEN)"))
 $versions = @()
 try { $versions = (Invoke-RestMethod "https://nuget.pkg.github.com/Videometer/download/$($PackageId.ToLower())/index.json" -Headers @{ Authorization = $auth }).versions } catch {}
-if ($versions -contains $v) { Write-Host "$v is already on the feed - nothing to publish"; exit 0 }
+if ($versions -contains $v) {
+    # Say it on the build, not only in the log: a green build numbered $v reads as a release.
+    Write-Host "##teamcity[buildNumber '$v (already on feed)']"
+    Write-Host "##teamcity[buildStatus text='$v is already on the feed - nothing published']"
+    Write-Host "$v is already on the feed - nothing to publish"
+    exit 0
+}
 
 New-Item out -ItemType Directory -Force | Out-Null
 # Publish the changelog entry for this version as a downloadable build artifact.
