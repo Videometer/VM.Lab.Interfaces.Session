@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net9.0-windows</TargetFramework>
+        <UseWPF>true</UseWPF>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <!-- Run on a newer .NET runtime when .NET 9 is not installed where the app is started from -->
+        <RollForward>Major</RollForward>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\VM.Lab.Interfaces.Session\VM.Lab.Interfaces.Session.csproj" />
+      <ProjectReference Include="..\VM.Lab.Session.ExternalRestSessionController\VM.Lab.Session.ExternalRestSessionController.csproj" />
+    </ItemGroup>
+
+</Project>

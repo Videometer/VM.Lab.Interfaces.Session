@@ -1,0 +1,32 @@
+<Window x:Class="VM.Lab.Session.ExternalRestSessionController.TestGui.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="External Rest Session Controller - Test GUI"
+        Width="1050"
+        Height="620"
+        WindowStartupLocation="CenterScreen">
+    <DockPanel Margin="8">
+        <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" TextWrapping="Wrap">
+            <Run Text="The buttons send examples of the REST commands. All commands, their parameters and their answers are described in the README, in the section 'REST API implementation for controlling Session':" />
+            <Hyperlink x:Name="ReadMeLink" Click="ReadMeLink_Click">
+                <Run x:Name="ReadMeLinkText" />
+            </Hyperlink>
+        </TextBlock>
+
+        <StackPanel DockPanel.Dock="Left" Width="230" Margin="0,0,8,0">
+            <StackPanel x:Name="CommandButtons" />
+            <CheckBox x:Name="SimulateLightSetupFailure"
+                      Margin="0,8,0,0"
+                      Content="Simulate light setup failure"
+                      Checked="SimulateLightSetupFailure_Changed"
+                      Unchecked="SimulateLightSetupFailure_Changed" />
+        </StackPanel>
+
+        <TextBox x:Name="Log"
+                 IsReadOnly="True"
+                 TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto"
+                 FontFamily="Consolas"
+                 FontSize="12" />
+    </DockPanel>
+</Window>
