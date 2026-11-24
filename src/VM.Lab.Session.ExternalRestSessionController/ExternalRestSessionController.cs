@@ -60,8 +60,28 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
 
     private SessionState _state;
     private ISphereHeightProvider _sphereHeightProvider;
-    private bool _lastImageFailed;
-    private string _lastErrorMessage;
+
+    /// <summary>
+    /// True from a capture command is issued until the session reports <see cref="SessionState.Capturing"/>.
+    /// Until then no state counts as "the capture is finished": the session can report the state it was
+    /// already in once more before it starts capturing, and that must not be mistaken for the image being done.
+    /// </summary>
+    private bool _awaitingCapturing;
+
+    /// <summary>The same as <see cref="_awaitingCapturing"/>, for a light setup command and <see cref="SessionState.AdjustingLightSetup"/>.</summary>
+    private bool _awaitingAdjustingLightSetup;
+
+    /// <summary>True while a light setup command is in flight. Tells which kind of work a reported error belongs to.</summary>
+    private bool _lightSetupCommandInFlight;
+
+    /// <summary>Why the last image failed. Null if it did not.</summary>
+    private string _imageFailure;
+
+    /// <summary>
+    /// Why the last light setup adjustment failed. Null if it did not. Kept apart from <see cref="_imageFailure"/>,
+    /// so a failed light setup adjustment is not reported as a failed image later on, and the other way round.
+    /// </summary>
+    private string _lightSetupFailure;
 
     /// <summary>
     /// Constructs the external session controller and starts the REST API.
@@ -226,16 +246,27 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
             Console.WriteLine($"In {nameof(ExternalRestSessionController)}.{nameof(StateChanged)} to {newState}.");
             _state = newState;
 
+            // The work the command asked for has started, so from here on leaving the state means it is over.
+            if (newState == SessionState.Capturing)
+            {
+                _awaitingCapturing = false;
+            }
+
+            if (newState == SessionState.AdjustingLightSetup)
+            {
+                _awaitingAdjustingLightSetup = false;
+            }
+
             // A failure state never releases a waiter, even though it does end the command. Releasing here
-            // would race with the reason being reported: a waiter could wake and read _lastImageFailed while
-            // it is still false, and so report a failed command as a success. ProvideErrorMessage does the
+            // would race with the reason being reported: a waiter could wake and read the failure while
+            // it is still empty, and so report a failed command as a success. ProvideErrorMessage does the
             // releasing instead, after it has recorded the reason.
             if (newState is SessionState.Error or SessionState.AdjustingLightSetupFailed)
             {
                 return;
             }
 
-            if (newState != SessionState.Capturing)
+            if (newState != SessionState.Capturing && !_awaitingCapturing)
             {
                 // The image is in hand
                 _captureComplete.Set();
@@ -249,7 +280,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
             }
 
             // Light-setup work is a side-trip off Ready, so leaving AdjustingLightSetup ends it.
-            if (newState != SessionState.AdjustingLightSetup)
+            if (newState != SessionState.AdjustingLightSetup && !_awaitingAdjustingLightSetup)
             {
                 _lightSetupAdjustmentComplete.Set();
             }
@@ -265,14 +296,23 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     {
         lock (_stateLock)
         {
-            _lastImageFailed = true;
-            _lastErrorMessage = errorMessage;
+            // The session does not say what failed, so go by what is in flight. The state is checked as well,
+            // for the adjustment whose caller has already timed out and gone.
+            var lightSetupFailed = _lightSetupCommandInFlight || _state == SessionState.AdjustingLightSetup;
 
-            // Whatever was in flight is finished, so release anyone waiting on it — an image, or a light setup
-            // adjustment. Set after the reason is recorded, so a released waiter is guaranteed to see it.
-            _captureComplete.Set();
-            _analysisComplete.Set();
-            _lightSetupAdjustmentComplete.Set();
+            // Whatever was in flight is finished, so release anyone waiting on it. Set after the reason is
+            // recorded, so a released waiter is guaranteed to see it.
+            if (lightSetupFailed)
+            {
+                _lightSetupFailure = errorMessage ?? string.Empty;
+                _lightSetupAdjustmentComplete.Set();
+            }
+            else
+            {
+                _imageFailure = errorMessage ?? string.Empty;
+                _captureComplete.Set();
+                _analysisComplete.Set();
+            }
         }
     }
 
@@ -298,7 +338,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     {
         lock (_stateLock)
         {
-            return new RestAnswer(HttpStatusCode.OK, new LastImageResponse(_lastImageFailed, _lastErrorMessage));
+            return new RestAnswer(HttpStatusCode.OK, new LastImageResponse(_imageFailure != null, _imageFailure));
         }
     }
 
@@ -315,13 +355,21 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         var comments = request.Comments ?? string.Empty;
 
         CaptureIsAboutToBeCalled();
-        var refused = TryIssueCommand("capture", () => _listener.Capture(id, initials, comments));
-        if (refused != null)
+        try
         {
-            return refused;
-        }
+            var refused = TryIssueCommand("capture", () => _listener.Capture(id, initials, comments));
+            if (refused != null)
+            {
+                return refused;
+            }
 
-        return WaitFor(_captureComplete, request.TimeoutSeconds, "capture to complete", "CaptureFinish");
+            return WaitFor(_captureComplete, request.TimeoutSeconds, "capture to complete", "CaptureFinish",
+                () => _imageFailure);
+        }
+        finally
+        {
+            CaptureCommandEnded();
+        }
     }
 
     private RestAnswer New()
@@ -341,7 +389,17 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         var refused = TryIssueCommand(
             "acknowledgement of the failed light setup adjustment",
             _listener.AcknowledgeAdjustingLightSetupFailed);
-        return refused ?? Succeeded("AdjustingLightSetupFailedAcknowledged");
+        if (refused != null)
+        {
+            return refused;
+        }
+
+        lock (_stateLock)
+        {
+            _lightSetupFailure = null;
+        }
+
+        return Succeeded("AdjustingLightSetupFailedAcknowledged");
     }
 
     private RestAnswer WaitForAnalysisComplete(TimeoutRequest request)
@@ -352,7 +410,8 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
             return invalid;
         }
 
-        return WaitFor(_analysisComplete, request.TimeoutSeconds, "analysis to complete", "AnalysisComplete");
+        return WaitFor(_analysisComplete, request.TimeoutSeconds, "analysis to complete", "AnalysisComplete",
+            () => _imageFailure);
     }
 
     private RestAnswer WaitForSphereUp(TimeoutRequest request)
@@ -440,18 +499,37 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         // AdjustingLightSetup, for the same reason as in CaptureIsAboutToBeCalled.
         lock (_stateLock)
         {
-            _lastImageFailed = false;
-            _lastErrorMessage = null;
+            _lightSetupFailure = null;
+            _lightSetupCommandInFlight = true;
+            _awaitingAdjustingLightSetup = true;
             _lightSetupAdjustmentComplete.Reset();
         }
 
-        var refused = TryIssueCommand(what, command);
-        if (refused != null)
+        try
         {
-            return refused;
-        }
+            var refused = TryIssueCommand(what, command);
+            if (refused != null)
+            {
+                return refused;
+            }
 
-        return WaitFor(_lightSetupAdjustmentComplete, timeoutSeconds, what, successMessage);
+            return WaitFor(_lightSetupAdjustmentComplete, timeoutSeconds, what, successMessage,
+                () => _lightSetupFailure);
+        }
+        finally
+        {
+            lock (_stateLock)
+            {
+                _lightSetupCommandInFlight = false;
+
+                // The adjustment never started, so nothing is in flight: do not leave the wait armed.
+                if (_awaitingAdjustingLightSetup)
+                {
+                    _awaitingAdjustingLightSetup = false;
+                    _lightSetupAdjustmentComplete.Set();
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -468,10 +546,30 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     {
         lock (_stateLock)
         {
-            _lastImageFailed = false;
-            _lastErrorMessage = null;
+            _imageFailure = null;
+            _awaitingCapturing = true;
             _captureComplete.Reset();
             _analysisComplete.Reset();
+        }
+    }
+
+    /// <summary>
+    /// Called when the capture command has been answered. If the session never started capturing, because it
+    /// refused the command or the wait timed out first, nothing is in flight, so the waits are not left armed
+    /// for an image that is not coming.
+    /// </summary>
+    private void CaptureCommandEnded()
+    {
+        lock (_stateLock)
+        {
+            if (!_awaitingCapturing)
+            {
+                return;
+            }
+
+            _awaitingCapturing = false;
+            _captureComplete.Set();
+            _analysisComplete.Set();
         }
     }
 
@@ -519,8 +617,14 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     /// is still signaled whenever we get round to waiting on it.
     /// </para>
     /// </summary>
+    /// <param name="completed">Signaled when the step is over</param>
+    /// <param name="timeoutSeconds">How long to wait</param>
+    /// <param name="what">What is waited for, for the messages</param>
+    /// <param name="successMessage">Message to answer with if the step succeeded</param>
+    /// <param name="getFailure">Reads why this kind of step failed, null if it did not. Called under the state lock.</param>
     /// <returns>The answer to the caller. Timing out and failing are reported separately.</returns>
-    private RestAnswer WaitFor(ManualResetEventSlim completed, int timeoutSeconds, string what, string successMessage)
+    private RestAnswer WaitFor(ManualResetEventSlim completed, int timeoutSeconds, string what, string successMessage,
+        Func<string> getFailure)
     {
         if (!completed.Wait(TimeSpan.FromSeconds(timeoutSeconds)))
         {
@@ -529,12 +633,13 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
 
         lock (_stateLock)
         {
-            if (!_lastImageFailed)
+            var failure = getFailure();
+            if (failure == null)
             {
                 return Succeeded(successMessage);
             }
 
-            return Answer(HttpStatusCode.InternalServerError, $"Waited for {what}, but it failed: {_lastErrorMessage}");
+            return Answer(HttpStatusCode.InternalServerError, $"Waited for {what}, but it failed: {failure}");
         }
     }
 

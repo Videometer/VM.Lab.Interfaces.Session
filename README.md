@@ -225,7 +225,11 @@ Every command answers with `{"success": true|false, "message": "..."}`.
 | 409         | The Session refused the command, or another command is still being processed.             |
 | 500         | The step was started but failed. The message holds the error message from the Session.    |
 | 503         | The sphere height is not available.                                                       |
-| 504         | The step did not finish within `timeoutSeconds`.                                          |
+| 504         | The step did not finish within `timeoutSeconds`. For /capture and the light setup commands this is also the answer if the Session never started the step. |
+
+Failures are kept apart by kind:
+* A failed image is answered by /capture and /wait-for-analysis-complete, and is what GET /last-image reports. It is cleared by the next /capture.
+* A failed light setup adjustment is answered by the light setup command that caused it. It is not reported by GET /last-image or by /wait-for-analysis-complete. The Session stays in the state `AdjustingLightSetupFailed` until /light-setup/acknowledge-failed is called.
 
 ## Example
 

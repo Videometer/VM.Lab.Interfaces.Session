@@ -18,6 +18,8 @@ public partial class MainWindow : Window
     private const string _readMeAddress =
         "https://github.com/Videometer/VM.Lab.Interfaces.Session#rest-api-implementation-for-controlling-session";
     private const int _simulatedLightSetupAdjustmentMs = 2000;
+    private const int _simulatedCaptureMs = 1500;
+    private const int _simulatedProcessingMs = 1500;
     private const string _timeoutBody = "{\"timeoutSeconds\": 30}";
     private const string _lightSetupBody = "{\"lightSetupName\": \"ExampleLightSetup\", \"timeoutSeconds\": 30}";
     private const string _captureBody =
@@ -96,9 +98,18 @@ public partial class MainWindow : Window
 
         listener.CaptureCalled += (_, _) =>
         {
-            controller.StateChanged(SessionState.Capturing);
-            controller.StateChanged(SessionState.Processing);
+            // The real session reports the state it is already in once more before it starts capturing.
+            // The controller must not take that for the image being finished.
             controller.StateChanged(SessionState.Ready);
+
+            Task.Run(() =>
+            {
+                controller.StateChanged(SessionState.Capturing);
+                Thread.Sleep(_simulatedCaptureMs);
+                controller.StateChanged(SessionState.Processing);
+                Thread.Sleep(_simulatedProcessingMs);
+                controller.StateChanged(SessionState.Ready);
+            });
         };
 
         listener.LightSetupAdjusted += (_, _) =>

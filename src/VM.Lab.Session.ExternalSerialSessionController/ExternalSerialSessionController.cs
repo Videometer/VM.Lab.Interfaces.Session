@@ -33,8 +33,28 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     private const string CommandFailedPrefix = "FAILED: ";
     private ISphereHeightProvider _sphereHeightProvider;
     private readonly object _stateLock = new object();
-    private bool _lastImageFailed;
-    private string _lastErrorMessage;
+
+    /// <summary>
+    /// True from a capture command is issued until the session reports <see cref="SessionState.Capturing"/>.
+    /// Until then no state counts as "the capture is finished": the session can report the state it was
+    /// already in once more before it starts capturing, and that must not be mistaken for the image being done.
+    /// </summary>
+    private bool _awaitingCapturing;
+
+    /// <summary>The same as <see cref="_awaitingCapturing"/>, for a light setup command and <see cref="SessionState.AdjustingLightSetup"/>.</summary>
+    private bool _awaitingAdjustingLightSetup;
+
+    /// <summary>True while a light setup command is in flight. Tells which kind of work a reported error belongs to.</summary>
+    private bool _lightSetupCommandInFlight;
+
+    /// <summary>Why the last image failed. Null if it did not.</summary>
+    private string _imageFailure;
+
+    /// <summary>
+    /// Why the last light setup adjustment failed. Null if it did not. Kept apart from <see cref="_imageFailure"/>,
+    /// so a failed light setup adjustment is not reported as a failed image later on, and the other way round.
+    /// </summary>
+    private string _lightSetupFailure;
     private readonly ManualResetEventSlim _captureComplete = new ManualResetEventSlim(false);
     private readonly ManualResetEventSlim _analysisComplete = new ManualResetEventSlim(false);
     private readonly ManualResetEventSlim _lightSetupAdjustmentComplete = new ManualResetEventSlim(false);
@@ -87,16 +107,27 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
             Console.WriteLine($"In {nameof(ExternalSerialSessionController)}.{nameof(StateChanged)} to {newState}.");
             _state = newState;
 
+            // The work the command asked for has started, so from here on leaving the state means it is over.
+            if (newState == SessionState.Capturing)
+            {
+                _awaitingCapturing = false;
+            }
+
+            if (newState == SessionState.AdjustingLightSetup)
+            {
+                _awaitingAdjustingLightSetup = false;
+            }
+
             // A failure state never releases a waiter, even though it does end the command. Releasing here
-            // would race with the reason being reported: a waiter could wake and read _lastImageFailed while
-            // it is still false, and so report a failed command as a success. ProvideErrorMessage does the
+            // would race with the reason being reported: a waiter could wake and read the failure while
+            // it is still empty, and so report a failed command as a success. ProvideErrorMessage does the
             // releasing instead, after it has recorded the reason.
             if (newState is SessionState.Error or SessionState.AdjustingLightSetupFailed)
             {
                 return;
             }
 
-            if (newState != SessionState.Capturing)
+            if (newState != SessionState.Capturing && !_awaitingCapturing)
             {
                 // The image is in hand
                 _captureComplete.Set();
@@ -110,7 +141,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
             }
 
             // Light-setup work is a side-trip off Ready, so leaving AdjustingLightSetup ends it.
-            if (newState != SessionState.AdjustingLightSetup)
+            if (newState != SessionState.AdjustingLightSetup && !_awaitingAdjustingLightSetup)
             {
                 _lightSetupAdjustmentComplete.Set();
             }
@@ -202,20 +233,27 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
                     return;
                 }
                 CaptureIsAboutToBeCalled();
-                if (!TryIssueCommand("capture", () => _listener.Capture(parts[1], parts[2], parts[3])))
+                try
                 {
-                    break;
-                }
+                    if (!TryIssueCommand("capture", () => _listener.Capture(parts[1], parts[2], parts[3])))
+                    {
+                        break;
+                    }
 
-                var captureTimeoutMs = captureTimeoutSeconds * 1000;
-                var captureFailureReason = WaitForCaptureComplete(captureTimeoutMs);
-                if (captureFailureReason == null)
-                {
-                    _serialPort.WriteLine("CaptureFinish");
+                    var captureTimeoutMs = captureTimeoutSeconds * 1000;
+                    var captureFailureReason = WaitForCaptureComplete(captureTimeoutMs);
+                    if (captureFailureReason == null)
+                    {
+                        _serialPort.WriteLine("CaptureFinish");
+                    }
+                    else
+                    {
+                        WriteCommandFailed(captureFailureReason);
+                    }
                 }
-                else
+                finally
                 {
-                    WriteCommandFailed(captureFailureReason);
+                    CaptureCommandEnded();
                 }
                 break;
             }
@@ -233,6 +271,10 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
                         "acknowledgement of the failed light setup adjustment",
                         _listener.AcknowledgeAdjustingLightSetupFailed))
                 {
+                    lock (_stateLock)
+                    {
+                        _lightSetupFailure = null;
+                    }
                     _serialPort.WriteLine("AdjustingLightSetupFailedAcknowledged");
                 }
                 break;
@@ -344,9 +386,10 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
             {
                 // "The last image failed" is a settled answer, so it carries the prefix: asking again would
                 // only get the same answer.
-                if (_lastImageFailed)
+                var imageFailure = _imageFailure;
+                if (imageFailure != null)
                 {
-                    WriteCommandFailed($"The last image failed: {_lastErrorMessage}");
+                    WriteCommandFailed($"The last image failed: {imageFailure}");
                 }
                 else
                 {
@@ -356,7 +399,9 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
             }
             case GetLastErrorMessageKeyWord:
             {
-                var answer = string.IsNullOrWhiteSpace(_lastErrorMessage) ? "No error" : _lastErrorMessage;
+                // The image failure if there is one, otherwise the light setup failure
+                var lastErrorMessage = _imageFailure ?? _lightSetupFailure;
+                var answer = string.IsNullOrWhiteSpace(lastErrorMessage) ? "No error" : lastErrorMessage;
                 _serialPort.WriteLine(answer);
                 break;
             }
@@ -418,10 +463,30 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     {
         lock (_stateLock)
         {
-            _lastImageFailed = false;
-            _lastErrorMessage = null;
+            _imageFailure = null;
+            _awaitingCapturing = true;
             _captureComplete.Reset();
             _analysisComplete.Reset();
+        }
+    }
+
+    /// <summary>
+    /// Called when the capture command has been answered. If the session never started capturing, because it
+    /// refused the command or the wait timed out first, nothing is in flight, so the waits are not left armed
+    /// for an image that is not coming.
+    /// </summary>
+    private void CaptureCommandEnded()
+    {
+        lock (_stateLock)
+        {
+            if (!_awaitingCapturing)
+            {
+                return;
+            }
+
+            _awaitingCapturing = false;
+            _captureComplete.Set();
+            _analysisComplete.Set();
         }
     }
 
@@ -439,33 +504,54 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
         // AdjustingLightSetup, for the same reason as in CaptureIsAboutToBeCalled.
         lock (_stateLock)
         {
-            _lastImageFailed = false;
-            _lastErrorMessage = null;
+            _lightSetupFailure = null;
+            _lightSetupCommandInFlight = true;
+            _awaitingAdjustingLightSetup = true;
             _lightSetupAdjustmentComplete.Reset();
         }
 
-        if (!TryIssueCommand(what, command))
+        try
         {
-            return;
-        }
+            if (!TryIssueCommand(what, command))
+            {
+                return;
+            }
 
-        var timeoutMs = timeoutSeconds * 1000;
-        var failureReason = WaitFor(_lightSetupAdjustmentComplete, timeoutMs, what, nameof(HandleLightSetupCommand));
-        if (failureReason == null)
-        {
-            _serialPort.WriteLine(successResponse);
+            var timeoutMs = timeoutSeconds * 1000;
+            var failureReason = WaitFor(_lightSetupAdjustmentComplete, timeoutMs, what,
+                nameof(HandleLightSetupCommand), () => _lightSetupFailure);
+            if (failureReason == null)
+            {
+                _serialPort.WriteLine(successResponse);
+            }
+            else
+            {
+                WriteCommandFailed(failureReason);
+            }
         }
-        else
+        finally
         {
-            WriteCommandFailed(failureReason);
+            lock (_stateLock)
+            {
+                _lightSetupCommandInFlight = false;
+
+                // The adjustment never started, so nothing is in flight: do not leave the wait armed.
+                if (_awaitingAdjustingLightSetup)
+                {
+                    _awaitingAdjustingLightSetup = false;
+                    _lightSetupAdjustmentComplete.Set();
+                }
+            }
         }
     }
 
     private string WaitForAnalysisToComplete(int timeoutMs) =>
-        WaitFor(_analysisComplete, timeoutMs, "analysis to complete", nameof(WaitForAnalysisToComplete));
+        WaitFor(_analysisComplete, timeoutMs, "analysis to complete", nameof(WaitForAnalysisToComplete),
+            () => _imageFailure);
 
     private string WaitForCaptureComplete(int timeoutMs) =>
-        WaitFor(_captureComplete, timeoutMs, "capture to complete", nameof(WaitForCaptureComplete));
+        WaitFor(_captureComplete, timeoutMs, "capture to complete", nameof(WaitForCaptureComplete),
+            () => _imageFailure);
 
     /// <summary>
     /// Blocks until <paramref name="completed"/> is signaled — by <see cref="StateChanged"/> on success, or by
@@ -487,7 +573,8 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     /// Null when the step completed successfully, otherwise why it did not.
     /// Timing out and failing are reported separately.
     /// </returns>
-    private string WaitFor(ManualResetEventSlim completed, int timeoutMs, string what, string caller)
+    private string WaitFor(ManualResetEventSlim completed, int timeoutMs, string what, string caller,
+        Func<string> getFailure)
     {
         if (!completed.Wait(timeoutMs))
         {
@@ -498,12 +585,14 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
 
         lock (_stateLock)
         {
-            if (!_lastImageFailed)
+            // Only the failure of the kind of step that was waited for counts. Read under the state lock.
+            var failure = getFailure();
+            if (failure == null)
             {
                 return null;
             }
 
-            var failed = $"Waited for {what}, but it failed: {_lastErrorMessage}";
+            var failed = $"Waited for {what}, but it failed: {failure}";
             Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{caller}: {failed}");
             return failed;
         }
@@ -519,14 +608,23 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     {
         lock (_stateLock)
         {
-            _lastImageFailed = true;
-            _lastErrorMessage = errorMessage;
+            // The session does not say what failed, so go by what is in flight. The state is checked as well,
+            // for the adjustment whose caller has already timed out and gone.
+            var lightSetupFailed = _lightSetupCommandInFlight || _state == SessionState.AdjustingLightSetup;
 
-            // Whatever was in flight is finished, so release anyone waiting on it — an image, or a light setup
-            // adjustment. Set after the reason is recorded, so a released waiter is guaranteed to see it.
-            _captureComplete.Set();
-            _analysisComplete.Set();
-            _lightSetupAdjustmentComplete.Set();
+            // Whatever was in flight is finished, so release anyone waiting on it. Set after the reason is
+            // recorded, so a released waiter is guaranteed to see it.
+            if (lightSetupFailed)
+            {
+                _lightSetupFailure = errorMessage ?? string.Empty;
+                _lightSetupAdjustmentComplete.Set();
+            }
+            else
+            {
+                _imageFailure = errorMessage ?? string.Empty;
+                _captureComplete.Set();
+                _analysisComplete.Set();
+            }
         }
     }
     

@@ -33,6 +33,6 @@ internal sealed record CommandResponse(bool Success, string Message);
 internal sealed record StateResponse(string State);
 
 /// <summary>Answer to GET last-image</summary>
-/// <param name="Failed">True if the last image, or the last light setup adjustment, failed</param>
+/// <param name="Failed">True if the last image failed</param>
 /// <param name="ErrorMessage">Why it failed. Null if it did not.</param>
 internal sealed record LastImageResponse(bool Failed, string ErrorMessage);

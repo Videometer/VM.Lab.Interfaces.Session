@@ -25,6 +25,13 @@ public class SerialSessionController_Old : SessionController_Old, INeedSphereHei
     private readonly object _stateLock = new object();
     private bool _lastImageFailed;
     private string _lastErrorMessage;
+
+    /// <summary>
+    /// True from a capture command is issued until the session reports
+    /// <see cref="SessionState_Old.CAPTURE_SINGLE_FRAME"/>. Until then the state is the one the previous image
+    /// left behind, and must not be mistaken for this image being captured.
+    /// </summary>
+    private bool _awaitingCapture;
     private bool _commandProcessingLockAcquired;
     private readonly object _commandProcessingLock = new object();
 
@@ -76,6 +83,7 @@ public class SerialSessionController_Old : SessionController_Old, INeedSphereHei
                 // Reset as we have begun on the next image
                 _lastImageFailed = false;
                 _lastErrorMessage = null;
+                _awaitingCapture = false;
             }
         }
     }
@@ -164,6 +172,10 @@ public class SerialSessionController_Old : SessionController_Old, INeedSphereHei
                     return;
                 }
                 bool suffixByTimestamp = parts[4] == "True";
+                lock (_stateLock)
+                {
+                    _awaitingCapture = true;
+                }
                 _listener.Capture(parts[1], parts[2], parts[3], suffixByTimestamp);
                 
                 var captureTimeoutMs = captureTimeoutSeconds * 1000;
@@ -314,13 +326,20 @@ public class SerialSessionController_Old : SessionController_Old, INeedSphereHei
         {
             lock (_stateLock)
             {
-                stateMachineReady = _state is SessionState_Old.ANALYZING_SINGLE_FRAME or SessionState_Old.WAIT_NEXT_SINGLE_FRAME;
+                bool imageIsCaptured = _state is SessionState_Old.ANALYZING_SINGLE_FRAME or SessionState_Old.WAIT_NEXT_SINGLE_FRAME;
+                stateMachineReady = imageIsCaptured && !_awaitingCapture;
                 if (!stateMachineReady && !loggedOnce)
                 {
                     loggedOnce = true;
                     Console.WriteLine($"{nameof(SerialSessionController_Old)}:{nameof(WaitForCaptureComplete)}: Waiting for capture to complete.");
                 }
             }
+        }
+
+        lock (_stateLock)
+        {
+            // If the capture never started, nothing is in flight any more
+            _awaitingCapture = false;
         }
 
         return stateMachineReady;
