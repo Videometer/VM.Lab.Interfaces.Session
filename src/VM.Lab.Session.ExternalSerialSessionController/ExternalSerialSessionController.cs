@@ -34,6 +34,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     private ISphereHeightProvider _sphereHeightProvider;
     private readonly object _stateLock = new object();
     private const string _captureWasStopped = "The capture was stopped before an image was captured.";
+    private const int _maxTimeoutSeconds = int.MaxValue / 1000;
 
     /// <summary>Set by <see cref="Dispose"/>. A wait that ends because of it is answered as closed, not as finished.</summary>
     private volatile bool _disposed;
@@ -189,6 +190,13 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
                 WriteResponse(message);
             }
         }
+        catch (Exception ex)
+        {
+            // An exception here would escape onto the serial port's event thread, where nothing can report
+            // it and it takes the process down. Answer the caller instead.
+            Console.WriteLine($"{nameof(ExternalSerialSessionController)}: Unexpected error: {ex}");
+            WriteCommandFailed($"Unexpected error: {ex.Message}");
+        }
         finally
         {
             // Release the lock if acquired
@@ -327,8 +335,10 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
             {
                 if (_sphereHeightProvider is null)
                 {
-                    throw new InvalidOperationException(
-                        $"{nameof(ExternalSerialSessionController)}:{nameof(WaitForSphereUpKeyWord)}: Sphere height provider was not provided.");
+                    const string noProvider = "Sphere height provider was not provided.";
+                    Console.WriteLine($"{nameof(ExternalSerialSessionController)}:{WaitForSphereUpKeyWord}: {noProvider}");
+                    WriteCommandFailed(noProvider);
+                    break;
                 }
                 
                 var parseOk = ParseTimeout(parts[1], "sphere up", out var sphereUpTimeoutSeconds);
@@ -479,8 +489,17 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
         if (!parseOk)
         {
             WriteResponse($"Unable to parse {timeoutType} timeout parameter. Parameter was: {timeoutToParse}.");
+            return false;
         }
-        return parseOk;
+
+        // A negative timeout, or one that overflows when converted to milliseconds, makes the wait throw.
+        var inRange = timeout >= 0 && timeout <= _maxTimeoutSeconds;
+        if (!inRange)
+        {
+            WriteResponse($"The {timeoutType} timeout parameter must be between 0 and {_maxTimeoutSeconds} seconds. " +
+                          $"Parameter was: {timeoutToParse}.");
+        }
+        return inRange;
     }
 
     /// <summary>Called when data is received from the external device</summary>
