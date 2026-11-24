@@ -147,6 +147,16 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
         // would race with the reason being reported: a waiter could wake and read the failure while
         // it is still empty, and so report a failed command as a success. ProvideErrorMessage does the
         // releasing instead, after it has recorded the reason.
+        // The exception is a failed light setup adjustment whose reason is already recorded: the session is now
+        // where the failure can be acknowledged, so this is the moment to answer the command.
+        var failedLightSetupCanBeAcknowledged = state == SessionState.AdjustingLightSetupFailed
+                                                && _lightSetupFailure != null
+                                                && !_awaitingAdjustingLightSetup;
+        if (failedLightSetupCanBeAcknowledged)
+        {
+            _lightSetupAdjustmentComplete.Set();
+        }
+
         if (state is SessionState.Error or SessionState.AdjustingLightSetupFailed)
         {
             return;
@@ -733,7 +743,14 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
             if (lightSetupFailed)
             {
                 _lightSetupFailure = errorMessage ?? string.Empty;
-                _lightSetupAdjustmentComplete.Set();
+
+                // The session reports the reason while it is still adjusting, and only then moves on to
+                // AdjustingLightSetupFailed. Answering already now would let the caller acknowledge the failure
+                // before the session can accept that, so the wait is released when that state is reported.
+                if (_state != SessionState.AdjustingLightSetup)
+                {
+                    _lightSetupAdjustmentComplete.Set();
+                }
             }
             else
             {
