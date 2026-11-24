@@ -39,6 +39,13 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     };
 
     private readonly HttpListener _httpListener;
+
+    /// <summary>
+    /// True when Windows did not allow listening on the network, so only requests from this PC are answered.
+    /// Registering the address localhost is not enough to ensure that: Windows still accepts a request from
+    /// another PC that names localhost as the host, so every request is checked as well.
+    /// </summary>
+    private readonly bool _localOnly;
     private readonly Dictionary<string, Func<HttpListenerRequest, RestAnswer>> _routes;
     private readonly object _stateLock = new object();
     private readonly ManualResetEventSlim _captureComplete = new ManualResetEventSlim(false);
@@ -79,7 +86,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
             [RouteKey(_post, "/light-setup/acknowledge-failed")] = _ => RunOneCommandAtATime(AcknowledgeAdjustingLightSetupFailed)
         };
 
-        _httpListener = StartListening();
+        _httpListener = StartListening(out _localOnly);
 
         var acceptThread = new Thread(AcceptRequests)
         {
@@ -94,7 +101,8 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     /// <summary>
     /// Starts listening on all network interfaces, or only on the PC itself if Windows does not allow the former.
     /// </summary>
-    private static HttpListener StartListening()
+    /// <param name="localOnly">True if only requests from this PC are to be answered</param>
+    private static HttpListener StartListening(out bool localOnly)
     {
         var networkPrefix = $"http://+:{_port}{_routePrefix}/";
         var localPrefix = $"http://localhost:{_port}{_routePrefix}/";
@@ -102,6 +110,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         try
         {
             var networkListener = Listen(networkPrefix);
+            localOnly = false;
             Console.WriteLine($"{nameof(ExternalRestSessionController)} is listening on {networkPrefix}");
             return networkListener;
         }
@@ -114,6 +123,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         }
 
         var localListener = Listen(localPrefix);
+        localOnly = true;
         Console.WriteLine($"{nameof(ExternalRestSessionController)} is listening on {localPrefix}");
         return localListener;
     }
@@ -170,6 +180,12 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         var path = request.Url.AbsolutePath.TrimEnd('/');
         var routeKey = $"{request.HttpMethod} {path}";
         Console.WriteLine($"{nameof(ExternalRestSessionController)} received: {routeKey}");
+
+        if (_localOnly && !request.IsLocal)
+        {
+            return Answer(HttpStatusCode.Forbidden,
+                $"Requests from other PCs are not allowed. Request came from {request.RemoteEndPoint?.Address}.");
+        }
 
         if (!_routes.TryGetValue(routeKey, out var route))
         {

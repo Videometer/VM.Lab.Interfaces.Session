@@ -221,6 +221,7 @@ Every command answers with `{"success": true|false, "message": "..."}`.
 |-------------|-------------------------------------------------------------------------------------------|
 | 200         | The command succeeded.                                                                    |
 | 400         | The request is invalid, for example a missing body or `timeoutSeconds`.                   |
+| 403         | The request came from another PC, and the API is not set up for use from the network. See "Setup for use of the REST API controller". |
 | 409         | The Session refused the command, or another command is still being processed.             |
 | 500         | The step was started but failed. The message holds the error message from the Session.    |
 | 503         | The sphere height is not available.                                                       |
