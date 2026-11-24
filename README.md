@@ -41,7 +41,9 @@ This document is split into two sections.
   * [Overview of the API](#overview-of-the-api)
   * [Endpoints](#endpoints)
   * [Responses](#responses)
+  * [Suggested user flow with the REST API](#suggested-user-flow-with-the-rest-api)
   * [Example](#example)
+  * [Example of the messages on the TCP connection](#example-of-the-messages-on-the-tcp-connection)
 * [Technical details](#technical-details)
   * [Setup for making and using your own C# controller](#setup-for-making-and-using-your-own-c-controller)
   * [Setup for use of the REST API controller](#setup-for-use-of-the-rest-api-controller)
@@ -253,10 +255,160 @@ Failures are kept apart by kind:
 * A capture that is stopped before an image was captured counts as a failed image. A capture that is stopped but still delivers its image does not.
 * A failed light setup adjustment is answered by the light setup command that caused it. It is not reported by GET /last-image or by /wait-for-analysis-complete. The Session stays in the state `AdjustingLightSetupFailed` until /light-setup/acknowledge-failed is called.
 
+## Suggested user flow with the REST API
+
+This flow is for an application where a robotic system presents samples to the VideometerLab instrument, and the robot, or the PLC that controls it, sends the commands.
+
+1. The human operator manually starts the VideometerLab Session and loads the necessary recipe.
+2. Before the first sample of a new batch, the client can send POST /new, so the results are saved to new files.
+3. Before the robot moves in under the sphere, the client sends POST /wait-for-sphere-up. Only when the answer is status code 200 is the sphere up, and the robot can move in without colliding with the sphere.
+4. The robot presents a sample in the VideometerLab instrument and moves away, so the sphere can move down without colliding with the robot arm.
+5. The client sends POST /capture. When the answer is status code 200, the image has been captured.
+6. The client sends POST /wait-for-sphere-up. When the answer is status code 200, the robot can safely remove the sample.
+7. The client sends POST /wait-for-analysis-complete. When the answer is status code 200, the analysis of the image has finished without errors.
+8. Repeat from step 4.
+
+The next POST /capture must not be sent before step 7 has been answered. The Session cannot capture a new image while it is still analysing the previous one, and answers such a POST /capture with status code 409.
+
+Handling of answers that are not status code 200:
+* 500 from POST /capture or POST /wait-for-analysis-complete: the image failed. `message` holds the error message that is also shown in the VideometerLab software. GET /last-image returns the same information. The next sample can be captured as normal.
+* 504: the step did not finish within `timeoutSeconds`. GET /state tells what the Session is doing.
+* 409: the Session cannot do the command in its current state. GET /state tells which state that is.
+* 423: the previous command has not been answered yet.
+* Any answer other than 200 from POST /wait-for-sphere-up, or no answer: the robot must not move in under the sphere.
+
 ## Example
 
 ```
 curl -X POST http://localhost:5080/api/v1/capture -H "Content-Type: application/json" -d "{\"id\":\"Sample1\",\"initials\":\"AB\",\"comments\":\"\",\"timeoutSeconds\":30}"
+```
+
+## Example of the messages on the TCP connection
+
+This section is for a client that does not have an HTTP client and writes the messages itself on a TCP connection, for example a PLC.
+
+The VideometerLab PC never sends a message by itself. The client opens a TCP connection to port 5080 on the VideometerLab PC, sends one request as text, and reads one answer as text. The client can close the connection when it has read the answer.
+
+Rules for the request:
+* Every line ends with the two characters carriage return and line feed (CR LF, the bytes 13 and 10).
+* The first line holds the method, the path and `HTTP/1.1`.
+* The `Host` line is required. It holds the name or IP address of the VideometerLab PC that the client connects to, and the port.
+* A request with a body has the line `Content-Type: application/json`, and the line `Content-Length` with the number of bytes in the body.
+* A POST without a body has the line `Content-Length: 0`.
+* An empty line ends the lines above. The body, if there is one, follows directly after it, with no CR LF after the body.
+
+Rules for the answer:
+* The first line holds the status code, for example `200`. See [Responses](#responses) for what the status codes mean.
+* The line `Content-Length` holds the number of bytes in the body.
+* An empty line ends the lines above. The body follows directly after it. It is JSON, also when the command failed.
+* The lines `Server` and `Date` can be ignored.
+
+### Capture an image
+
+The client sends this. The body is 66 bytes long.
+
+```
+POST /api/v1/capture HTTP/1.1
+Host: 192.168.0.10:5080
+Content-Type: application/json
+Content-Length: 66
+
+{"id":"Sample1","initials":"AB","comments":"","timeoutSeconds":30}
+```
+
+The answer comes when the image has been captured. Until then nothing is sent, so the client must wait for it for at least `timeoutSeconds`.
+
+```
+HTTP/1.1 200 OK
+Content-Length: 42
+Content-Type: application/json; charset=utf-8
+Server: Microsoft-HTTPAPI/2.0
+Date: Tue, 24 Nov 2026 10:51:05 GMT
+
+{"success":true,"message":"CaptureFinish"}
+```
+
+### Wait for the analysis to complete
+
+```
+POST /api/v1/wait-for-analysis-complete HTTP/1.1
+Host: 192.168.0.10:5080
+Content-Type: application/json
+Content-Length: 21
+
+{"timeoutSeconds":30}
+```
+
+```
+HTTP/1.1 200 OK
+Content-Length: 45
+Content-Type: application/json; charset=utf-8
+Server: Microsoft-HTTPAPI/2.0
+Date: Tue, 24 Nov 2026 10:51:07 GMT
+
+{"success":true,"message":"AnalysisComplete"}
+```
+
+### Ask if the last image failed
+
+A GET has no body, so the request ends with the empty line.
+
+```
+GET /api/v1/last-image HTTP/1.1
+Host: 192.168.0.10:5080
+
+```
+
+```
+HTTP/1.1 200 OK
+Content-Length: 36
+Content-Type: application/json; charset=utf-8
+Server: Microsoft-HTTPAPI/2.0
+Date: Tue, 24 Nov 2026 10:51:07 GMT
+
+{"failed":false,"errorMessage":null}
+```
+
+### A command without a body
+
+```
+POST /api/v1/stop HTTP/1.1
+Host: 192.168.0.10:5080
+Content-Length: 0
+
+```
+
+```
+HTTP/1.1 200 OK
+Content-Length: 36
+Content-Type: application/json; charset=utf-8
+Server: Microsoft-HTTPAPI/2.0
+Date: Tue, 24 Nov 2026 10:51:07 GMT
+
+{"success":true,"message":"Stopped"}
+```
+
+### A command that is not accepted
+
+Here `timeoutSeconds` is missing in the body. The status code is not 200, and `message` tells why.
+
+```
+POST /api/v1/capture HTTP/1.1
+Host: 192.168.0.10:5080
+Content-Type: application/json
+Content-Length: 16
+
+{"id":"Sample1"}
+```
+
+```
+HTTP/1.1 400 Bad Request
+Content-Length: 91
+Content-Type: application/json; charset=utf-8
+Server: Microsoft-HTTPAPI/2.0
+Date: Tue, 24 Nov 2026 10:51:07 GMT
+
+{"success":false,"message":"timeoutSeconds must be between 1 and 86400. Parameter was: 0."}
 ```
 
 # Technical details
