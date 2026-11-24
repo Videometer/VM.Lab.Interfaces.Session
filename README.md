@@ -211,17 +211,26 @@ The "ExternalRestSessionController" exposes the same commands as the serial impl
 | POST   | /light-setup/auto               | `timeoutSeconds`                               | AutoLightComplete                     |
 | POST   | /light-setup/acknowledge-failed |                                                | AdjustingLightSetupFailedAcknowledged |
 
+`timeoutSeconds` is a whole number of seconds from 1 to 86400 (24 hours). It is required in every command that lists it, and a value outside the range is answered with status code 400.
+
 /capture answers once the image has been captured and before the analysis has finished, like the Python method "Capture Image".
 
 ## Responses
 
-Every command answers with `{"success": true|false, "message": "..."}`.
+Every POST command, and GET /connection, answers with `{"success": true|false, "message": "..."}`.
+
+The two queries answer with their own body when they succeed:
+* GET /state answers `{"state": "..."}`, where the value is the name of the Session state, for example `Ready`. See the Session state machine below.
+* GET /last-image answers `{"failed": true|false, "errorMessage": "..."}`. `errorMessage` is `null` when `failed` is `false`.
+
+Every error, also for the two queries, is answered with `{"success": false, "message": "..."}`.
 
 | Status code | Meaning                                                                                   |
 |-------------|-------------------------------------------------------------------------------------------|
 | 200         | The command succeeded.                                                                    |
-| 400         | The request is invalid, for example a missing body or `timeoutSeconds`.                   |
+| 400         | The request is invalid, for example a missing body or `timeoutSeconds` out of range.      |
 | 403         | The request came from another PC, and the API is not set up for use from the network. See "Setup for use of the REST API controller". |
+| 404         | Unknown command: the path does not exist.                                                 |
 | 405         | The path exists, but not with this method. The `Allow` header holds the method to use.    |
 | 409         | The Session refused the command, because it is not valid in the current Session state.    |
 | 423         | Another command is still being processed. Send the command again when that has answered.  |
