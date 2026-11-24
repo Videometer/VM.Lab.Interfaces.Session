@@ -36,8 +36,15 @@ This document is split into two sections.
   * [SaveLightSetup.py](#savelightsetuppy)
   * [DoAutoLight.py](#doautolightpy)
   * [Suggested User Flow](#suggested-user-flow)
+* [REST API implementation for controlling Session](#rest-api-implementation-for-controlling-session)
+  * [Intended use](#intended-use)
+  * [Overview of the API](#overview-of-the-api)
+  * [Endpoints](#endpoints)
+  * [Responses](#responses)
+  * [Example](#example)
 * [Technical details](#technical-details)
   * [Setup for making and using your own C# controller](#setup-for-making-and-using-your-own-c-controller)
+  * [Setup for use of the REST API controller](#setup-for-use-of-the-rest-api-controller)
   * [Setup for use of a Python controller](#setup-for-use-of-a-python-controller)
   * [Setup for making your own Python controller](#setup-for-making-your-own-python-controller)
   * [Session state machine](#session-state-machine)
@@ -50,8 +57,9 @@ Videometer provides the following:
 * An abstract C# class "ExternalSessionController" which anyone can inherit from and make a custom implementation.
 * A C# implementation called "ExternalSerialSessionController" that communicates over a serial connection with Phyton scripts that can control the Session.
   * Corresponding Phyton scripts to control the Session.
+* A C# implementation called "ExternalRestSessionController" that exposes a REST API over HTTP that can control the Session.
 
-Both implementations work by controlling the Session by calling methods on the "IExternalSessionControllerListener" interface.
+All implementations work by controlling the Session by calling methods on the "IExternalSessionControllerListener" interface.
 
 # Generic C# controller for Session
 Below is listed the methods that are exposed by the generic C# controller that can be used to control Session from C# code.
@@ -177,11 +185,97 @@ The suggested user flow is as follows:
 
 Optionally, a call to the Python script "DidLastImageFail.py" can be added between step 4 and 5 and any custom error handling be done here.
 
+# REST API implementation for controlling Session
+
+The "ExternalRestSessionController" exposes the same commands as the serial implementation, as a REST API over HTTP. Any client that can send HTTP requests can control the Session.
+
+## Intended use
+
+The REST API is intended for use on a closed, internal network only, for example a dedicated connection or a separate network segment between the VideometerLab PC and a robot, PLC or PC that controls it. It is not intended to be reachable from an office network, from the internet, or from any network with devices or users that are not trusted.
+
+The API has no authentication and no encryption. Every device that can reach the port can control the instrument, including starting a capture, which moves the sphere. Protection against unauthorised access is therefore not provided by the API, and must be provided by the network it is connected to, for example by network separation and firewall rules.
+
+## Overview of the API
+
+* Base address: `http://<VideometerLab PC>:5080/api/v1`
+* Request and response bodies are JSON.
+* A POST without a body must still send the header `Content-Length: 0`, or Windows rejects it with status code 411. Most HTTP clients do this by themselves; with curl, add `-d ""`.
+* Commands that take time answer when the step has finished, failed or timed out. Set the HTTP client's timeout longer than the `timeoutSeconds` sent in the request.
+* Only one of the commands Capture, New and the light setup commands is processed at a time; a second one is answered with status code 423. Stop, the waits and the queries can be called while such a command is in progress.
+
+## Endpoints
+
+| Method | Path                            | Body                                           | Success message                       |
+|--------|---------------------------------|------------------------------------------------|---------------------------------------|
+| GET    | /connection                     |                                                | ConnectionOK                          |
+| GET    | /state                          |                                                | `{"state": "Ready"}`                  |
+| GET    | /last-image                     |                                                | `{"failed": false, "errorMessage": null}` |
+| POST   | /capture                        | `id`, `initials`, `comments`, `timeoutSeconds` | CaptureFinish                         |
+| POST   | /wait-for-analysis-complete     | `timeoutSeconds`                               | AnalysisComplete                      |
+| POST   | /wait-for-sphere-up             | `timeoutSeconds`                               | SphereIsUp                            |
+| POST   | /new                            |                                                | NewMeasurementStarted                 |
+| POST   | /stop                           |                                                | Stopped                               |
+| POST   | /light-setup/load               | `lightSetupName`, `timeoutSeconds`             | LightSetupLoaded                      |
+| POST   | /light-setup/save               | `lightSetupName`, `timeoutSeconds`             | LightSetupSaved                       |
+| POST   | /light-setup/auto               | `timeoutSeconds`                               | AutoLightComplete                     |
+| POST   | /light-setup/acknowledge-failed |                                                | AdjustingLightSetupFailedAcknowledged |
+
+`timeoutSeconds` is a whole number of seconds from 1 to 86400 (24 hours). It is required in every command that lists it, and a value outside the range is answered with status code 400.
+
+/capture answers once the image has been captured and before the analysis has finished, like the Python method "Capture Image".
+
+## Responses
+
+Every POST command, and GET /connection, answers with `{"success": true|false, "message": "..."}`.
+
+The two queries answer with their own body when they succeed:
+* GET /state answers `{"state": "..."}`, where the value is the name of the Session state, for example `Ready`. See the Session state machine below.
+* GET /last-image answers `{"failed": true|false, "errorMessage": "..."}`. `errorMessage` is `null` when `failed` is `false`.
+
+Every error, also for the two queries, is answered with `{"success": false, "message": "..."}`.
+
+| Status code | Meaning                                                                                   |
+|-------------|-------------------------------------------------------------------------------------------|
+| 200         | The command succeeded.                                                                    |
+| 400         | The request is invalid, for example a missing body or `timeoutSeconds` out of range.      |
+| 403         | The request came from another PC, and the API is not set up for use from the network. See "Setup for use of the REST API controller". |
+| 404         | Unknown command: the path does not exist.                                                 |
+| 405         | The path exists, but not with this method. The `Allow` header holds the method to use.    |
+| 409         | The Session refused the command, because it is not valid in the current Session state.    |
+| 423         | Another command is still being processed. Send the command again when that has answered.  |
+| 500         | The step was started but failed, or an unexpected error happened. The message holds the error message from the Session. |
+| 501         | The Session does not support the command.                                                 |
+| 503         | The sphere height is not available, or the Session was closed before the step finished.   |
+| 504         | The step did not finish within `timeoutSeconds`. For /capture and the light setup commands this is also the answer if the Session never started the step. |
+
+Failures are kept apart by kind:
+* A failed image is answered by /capture and /wait-for-analysis-complete, and is what GET /last-image reports. It is cleared by the next /capture that the Session accepts.
+* A capture that is stopped before an image was captured counts as a failed image. A capture that is stopped but still delivers its image does not.
+* A failed light setup adjustment is answered by the light setup command that caused it. It is not reported by GET /last-image or by /wait-for-analysis-complete. The Session stays in the state `AdjustingLightSetupFailed` until /light-setup/acknowledge-failed is called.
+
+## Example
+
+```
+curl -X POST http://localhost:5080/api/v1/capture -H "Content-Type: application/json" -d "{\"id\":\"Sample1\",\"initials\":\"AB\",\"comments\":\"\",\"timeoutSeconds\":30}"
+```
+
 # Technical details
 
 ## Setup for making and using your own C# controller
 To make your own session controller in C# you have to make a new class and inherent from the abstract class "ExternalSessionController". You then compile your dll and copy it into the VideometerLab installation folder. When you start Session, your external Session controller can now be used.  
 An example of this can be found in the "ExternalSerialSessionController" class.
+
+## Setup for use of the REST API controller
+To use the REST API controller, you need to copy the dll "VM.Lab.Session.ExternalRestSessionController.dll" into the VideometerLab installation folder. When you start Session you can now send commands to the VideometerLab instrument as HTTP requests.
+
+Note that:
+* Without the two steps below, the API only answers requests sent from the VideometerLab PC itself, to `http://localhost:5080/api/v1`.
+* To reach the API from another PC, Windows must be told that Session may listen on the network. Run this once as administrator on the VideometerLab PC, and restart Session:
+  ```
+  netsh http add urlacl url=http://+:5080/api/v1/ sddl="D:(A;;GX;;;WD)"
+  ```
+* To reach the API from another PC, inbound TCP port 5080 must also be allowed in the Windows firewall on the VideometerLab PC.
+* The port number is defined at the top of the "ExternalRestSessionController" class.
 
 ## Setup for use of a Python controller
 To use our Python controller, you need to copy the dll "VM.Lab.Session.ExternalSerialSessionController.dll" into the VideometerLab installation folder. When you start Session you can now send commands to the VideometerLab instrument by executing the provided Python scripts.
