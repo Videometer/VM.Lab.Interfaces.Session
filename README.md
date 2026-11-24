@@ -42,8 +42,8 @@ This document is split into two sections.
   * [Endpoints](#endpoints)
   * [Responses](#responses)
   * [Suggested user flow with the REST API](#suggested-user-flow-with-the-rest-api)
-  * [Example](#example)
-  * [Example of the messages on the TCP connection](#example-of-the-messages-on-the-tcp-connection)
+  * [Example with curl](#example-with-curl)
+  * [Example without an HTTP client](#example-without-an-http-client)
 * [Technical details](#technical-details)
   * [Setup for making and using your own C# controller](#setup-for-making-and-using-your-own-c-controller)
   * [Setup for use of the REST API controller](#setup-for-use-of-the-rest-api-controller)
@@ -277,13 +277,13 @@ Handling of answers that are not status code 200:
 * 423: the previous command has not been answered yet.
 * Any answer other than 200 from POST /wait-for-sphere-up, or no answer: the robot must not move in under the sphere.
 
-## Example
+## Example with curl
 
 ```
 curl -X POST http://localhost:5080/api/v1/capture -H "Content-Type: application/json" -d "{\"id\":\"Sample1\",\"initials\":\"AB\",\"comments\":\"\",\"timeoutSeconds\":30}"
 ```
 
-## Example of the messages on the TCP connection
+## Example without an HTTP client
 
 This section is for a client that does not have an HTTP client and writes the messages itself on a TCP connection, for example a PLC.
 
