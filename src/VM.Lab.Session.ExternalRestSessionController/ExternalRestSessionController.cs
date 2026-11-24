@@ -26,6 +26,8 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     private const float _minimumSafeSphereHeight = 82;
     private const int _sphereHeightPollIntervalMs = 500;
     private const int _accessDeniedErrorCode = 5;
+    private const int _disposeGraceMs = 2000;
+    private const string _captureWasStopped = "The capture was stopped before an image was captured.";
     private const string _get = "GET";
     private const string _post = "POST";
 
@@ -60,6 +62,12 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
 
     private SessionState _state;
     private ISphereHeightProvider _sphereHeightProvider;
+
+    /// <summary>Set by <see cref="Dispose"/>. A wait that ends because of it is answered as closed, not as finished.</summary>
+    private volatile bool _disposed;
+
+    /// <summary>Requests accepted but not answered yet. <see cref="Dispose"/> gives them a moment to be answered.</summary>
+    private int _requestsInFlight;
 
     /// <summary>
     /// True from a capture command is issued until the session reports <see cref="SessionState.Capturing"/>.
@@ -172,15 +180,16 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
                 return;
             }
 
+            Interlocked.Increment(ref _requestsInFlight);
             Task.Run(() => HandleRequest(context));
         }
     }
 
     private void HandleRequest(HttpListenerContext context)
     {
-        var answer = GetAnswer(context.Request);
         try
         {
+            var answer = GetAnswer(context.Request);
             var body = JsonSerializer.SerializeToUtf8Bytes(answer.Body, answer.Body.GetType(), _jsonOptions);
             context.Response.StatusCode = (int)answer.StatusCode;
             context.Response.ContentType = "application/json; charset=utf-8";
@@ -197,6 +206,10 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
             // The caller has gone away, or the listener was stopped, so there is no one left to answer.
             Console.WriteLine($"{nameof(ExternalRestSessionController)}: Could not send the answer: {ex.Message}");
         }
+        finally
+        {
+            Interlocked.Decrement(ref _requestsInFlight);
+        }
     }
 
     private RestAnswer GetAnswer(HttpListenerRequest request)
@@ -204,6 +217,11 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         var path = request.Url.AbsolutePath.TrimEnd('/');
         var routeKey = $"{request.HttpMethod} {path}";
         Console.WriteLine($"{nameof(ExternalRestSessionController)} received: {routeKey}");
+
+        if (_disposed)
+        {
+            return SessionClosed("The Session is closing.");
+        }
 
         if (_localOnly && !request.IsLocal)
         {
@@ -267,7 +285,17 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         lock (_stateLock)
         {
             Console.WriteLine($"In {nameof(ExternalRestSessionController)}.{nameof(StateChanged)} to {newState}.");
+            var previousState = _state;
             _state = newState;
+
+            // A capture that produced an image always goes on to Processing, and one that failed to Error.
+            // Leaving Capturing for anything else means the capture was stopped, and there is no image.
+            // Recorded as the reason before the waits are released below, so the waiter is sure to see it.
+            var leftCapturing = previousState == SessionState.Capturing && newState != SessionState.Capturing;
+            if (leftCapturing && newState is not (SessionState.Processing or SessionState.Error))
+            {
+                _imageFailure = _captureWasStopped;
+            }
 
             // The work the command asked for has started, so from here on leaving the state means it is over.
             if (newState == SessionState.Capturing)
@@ -280,33 +308,42 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
                 _awaitingAdjustingLightSetup = false;
             }
 
-            // A failure state never releases a waiter, even though it does end the command. Releasing here
-            // would race with the reason being reported: a waiter could wake and read the failure while
-            // it is still empty, and so report a failed command as a success. ProvideErrorMessage does the
-            // releasing instead, after it has recorded the reason.
-            if (newState is SessionState.Error or SessionState.AdjustingLightSetupFailed)
-            {
-                return;
-            }
+            ReleaseWaitsFinishedIn(newState);
+        }
+    }
 
-            if (newState != SessionState.Capturing && !_awaitingCapturing)
-            {
-                // The image is in hand
-                _captureComplete.Set();
+    /// <summary>
+    /// Releases the waits for the steps that are over when the session is in <paramref name="state"/>.
+    /// Must be called under the state lock.
+    /// </summary>
+    private void ReleaseWaitsFinishedIn(SessionState state)
+    {
+        // A failure state never releases a waiter, even though it does end the command. Releasing here
+        // would race with the reason being reported: a waiter could wake and read the failure while
+        // it is still empty, and so report a failed command as a success. ProvideErrorMessage does the
+        // releasing instead, after it has recorded the reason.
+        if (state is SessionState.Error or SessionState.AdjustingLightSetupFailed)
+        {
+            return;
+        }
 
-                // Processing is the only remaining step between a captured image and a usable result,
-                // so reaching anything past it means the analysis is over.
-                if (newState != SessionState.Processing)
-                {
-                    _analysisComplete.Set();
-                }
-            }
+        if (state != SessionState.Capturing && !_awaitingCapturing)
+        {
+            // The image is in hand
+            _captureComplete.Set();
 
-            // Light-setup work is a side-trip off Ready, so leaving AdjustingLightSetup ends it.
-            if (newState != SessionState.AdjustingLightSetup && !_awaitingAdjustingLightSetup)
+            // Processing is the only remaining step between a captured image and a usable result,
+            // so reaching anything past it means the analysis is over.
+            if (state != SessionState.Processing)
             {
-                _lightSetupAdjustmentComplete.Set();
+                _analysisComplete.Set();
             }
+        }
+
+        // Light-setup work is a side-trip off Ready, so leaving AdjustingLightSetup ends it.
+        if (state != SessionState.AdjustingLightSetup && !_awaitingAdjustingLightSetup)
+        {
+            _lightSetupAdjustmentComplete.Set();
         }
     }
 
@@ -377,7 +414,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         var initials = request.Initials ?? string.Empty;
         var comments = request.Comments ?? string.Empty;
 
-        CaptureIsAboutToBeCalled();
+        var before = CaptureIsAboutToBeCalled();
         try
         {
             var refused = TryIssueCommand("capture", () => _listener.Capture(id, initials, comments));
@@ -391,7 +428,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         }
         finally
         {
-            CaptureCommandEnded();
+            CaptureCommandEnded(before);
         }
     }
 
@@ -455,6 +492,11 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         var loggedOnce = false;
         while (true)
         {
+            if (_disposed)
+            {
+                return SessionClosed("The Session was closed while waiting for the sphere to move up.");
+            }
+
             var sphereHeight = _sphereHeightProvider.GetSphereHeight();
             if (sphereHeight > _minimumSafeSphereHeight)
             {
@@ -520,8 +562,12 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     {
         // Discard the previous outcome and arm the wait. Per command rather than on entry to
         // AdjustingLightSetup, for the same reason as in CaptureIsAboutToBeCalled.
+        string failureBefore;
+        bool completeBefore;
         lock (_stateLock)
         {
+            failureBefore = _lightSetupFailure;
+            completeBefore = _lightSetupAdjustmentComplete.IsSet;
             _lightSetupFailure = null;
             _lightSetupCommandInFlight = true;
             _awaitingAdjustingLightSetup = true;
@@ -545,11 +591,17 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
             {
                 _lightSetupCommandInFlight = false;
 
-                // The adjustment never started, so nothing is in flight: do not leave the wait armed.
+                // The adjustment never started, so this command changed nothing: put back what it replaced.
                 if (_awaitingAdjustingLightSetup)
                 {
                     _awaitingAdjustingLightSetup = false;
-                    _lightSetupAdjustmentComplete.Set();
+                    _lightSetupFailure ??= failureBefore;
+                    if (completeBefore)
+                    {
+                        _lightSetupAdjustmentComplete.Set();
+                    }
+
+                    ReleaseWaitsFinishedIn(_state);
                 }
             }
         }
@@ -565,23 +617,27 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     /// discard the very failure being reported and re-arm an event a waiter is already blocked on.
     /// </para>
     /// </summary>
-    private void CaptureIsAboutToBeCalled()
+    /// <returns>What the command replaced, for <see cref="CaptureCommandEnded"/>.</returns>
+    private CaptureWaits CaptureIsAboutToBeCalled()
     {
         lock (_stateLock)
         {
+            var before = new CaptureWaits(_imageFailure, _captureComplete.IsSet, _analysisComplete.IsSet);
             _imageFailure = null;
             _awaitingCapturing = true;
             _captureComplete.Reset();
             _analysisComplete.Reset();
+            return before;
         }
     }
 
     /// <summary>
     /// Called when the capture command has been answered. If the session never started capturing, because it
-    /// refused the command or the wait timed out first, nothing is in flight, so the waits are not left armed
-    /// for an image that is not coming.
+    /// refused the command or the wait timed out first, the command changed nothing, so what it replaced is put
+    /// back. An image from an earlier command can still be in flight, and its outcome and its waits must be
+    /// left as they were: neither released as if it were finished, nor armed for an image that is not coming.
     /// </summary>
-    private void CaptureCommandEnded()
+    private void CaptureCommandEnded(CaptureWaits before)
     {
         lock (_stateLock)
         {
@@ -591,10 +647,29 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
             }
 
             _awaitingCapturing = false;
-            _captureComplete.Set();
-            _analysisComplete.Set();
+
+            // A failure reported in the meantime belongs to the earlier image and is the newer news, so keep it.
+            _imageFailure ??= before.ImageFailure;
+            if (before.CaptureComplete)
+            {
+                _captureComplete.Set();
+            }
+
+            if (before.AnalysisComplete)
+            {
+                _analysisComplete.Set();
+            }
+
+            // The earlier image may have moved on while the waits were held back for this command.
+            ReleaseWaitsFinishedIn(_state);
         }
     }
+
+    /// <summary>The outcome and the waits of the previous image, as they were before a capture command</summary>
+    /// <param name="ImageFailure">Why the previous image failed. Null if it did not.</param>
+    /// <param name="CaptureComplete">True if the wait for the capture was released</param>
+    /// <param name="AnalysisComplete">True if the wait for the analysis was released</param>
+    private sealed record CaptureWaits(string ImageFailure, bool CaptureComplete, bool AnalysisComplete);
 
     /// <summary>
     /// Runs a command that changes what the session does, refusing it if another one is still in flight.
@@ -658,7 +733,15 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     private RestAnswer WaitFor(ManualResetEventSlim completed, int timeoutSeconds, string what, string successMessage,
         Func<string> getFailure)
     {
-        if (!completed.Wait(TimeSpan.FromSeconds(timeoutSeconds)))
+        var signaled = completed.Wait(TimeSpan.FromSeconds(timeoutSeconds));
+
+        // Dispose releases the waits so they end. That is not the step finishing.
+        if (_disposed)
+        {
+            return SessionClosed($"The Session was closed while waiting for {what}.");
+        }
+
+        if (!signaled)
         {
             return TimedOut($"Timed out after {timeoutSeconds}s waiting for {what}. Session state is {_state}.");
         }
@@ -713,6 +796,8 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
 
     private static RestAnswer TimedOut(string reason) => Answer(HttpStatusCode.GatewayTimeout, reason);
 
+    private static RestAnswer SessionClosed(string reason) => Answer(HttpStatusCode.ServiceUnavailable, reason);
+
     private static RestAnswer Answer(HttpStatusCode statusCode, string reason)
     {
         Console.WriteLine($"{nameof(ExternalRestSessionController)}: {reason}");
@@ -722,11 +807,15 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     /// <summary>Clean up internally used resources</summary>
     public override void Dispose()
     {
-        // Release anyone still blocked before disposing, so the wait ends rather than throwing.
+        // Release anyone still blocked, so the wait ends rather than throwing. The flag is set first, so the
+        // released requests are answered as "the Session was closed" and not as a finished step.
+        _disposed = true;
         _captureComplete.Set();
         _analysisComplete.Set();
         _lightSetupAdjustmentComplete.Set();
 
+        // Closing the listener drops the requests in flight unanswered, so give them a moment to be answered.
+        SpinWait.SpinUntil(() => Volatile.Read(ref _requestsInFlight) == 0, _disposeGraceMs);
         _httpListener.Close();
 
         _captureComplete.Dispose();
