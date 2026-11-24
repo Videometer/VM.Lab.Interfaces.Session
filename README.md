@@ -57,14 +57,14 @@ The communication protocol handles messages between the VideometerLab Session an
 
 Videometer provides the following:
 * An abstract C# class "ExternalSessionController" which anyone can inherit from and make a custom implementation.
-* A C# implementation called "ExternalSerialSessionController" that communicates over a serial connection with Phyton scripts that can control the Session.
-  * Corresponding Phyton scripts to control the Session.
+* A C# implementation called "ExternalSerialSessionController" that communicates over a serial connection with Python scripts that can control the Session.
+  * Corresponding Python scripts to control the Session.
 * A C# implementation called "ExternalRestSessionController" that exposes a REST API over HTTP that can control the Session.
 
 All implementations work by controlling the Session by calling methods on the "IExternalSessionControllerListener" interface.
 
 # Generic C# controller for Session
-Below is listed the methods that are exposed by the generic C# controller that can be used to control Session from C# code.
+Below are listed the methods that are exposed by the generic C# controller that can be used to control Session from C# code.
 
 ## Capture
 An image is captured, analyzed, and the result is shown on screen. This corresponds to using the capture button in the GUI.
@@ -74,7 +74,7 @@ The command takes the following arguments:
 * Comment
 
 ## New
-Cleares the GUI and makes ready for beginning new measurements. There are no arguments to this method.
+Clears the GUI and makes ready for beginning new measurements. There are no arguments to this method.
 
 ## Stop
 Stops the current measurement. This corresponds to using the stop button in the GUI. There are no arguments to this method.
@@ -89,11 +89,11 @@ Saves the active light setup to the active workspace. The name of the light setu
 Performs an automatic light setup. There are no arguments to this method.
 
 ## AcknowledgeAdjustingLightSetupFailed
-Acknowledge a failed light setup adjustment.
+Acknowledges a failed light setup adjustment.
 The session itself does not clear a failed light setup adjustment: it leaves the session in *SessionState.AdjustingLightSetupFailed*, where it refuses further commands, until the controller that issued the adjustment acknowledges the failure. That way the external controller cannot continue to capture images without being aware of the light setup adjustment failure.
 
 ## StateChanged
-This method is called when ever the internal Session state changes. See diagram below.
+This method is called whenever the internal Session state changes. See diagram below.
 
 ## ProvideErrorMessage
 Called if an error happens, for example, something in the pipeline of capturing, analyzing, or saving of results, failed for the current image. Used to inform external controllers that something went wrong.
@@ -106,13 +106,13 @@ This section explains an example of an external Session controller written in Py
 
 It works by communicating over a serial connection between the "ExternalSerialSessionController" and the Python scripts.    
 Both the "ExternalSerialSessionController" and the Python scripts can be edited and customized to your needs/application.
-Both is supplied in the Releases section.
+Both are supplied in the Releases section.
 
 ## Initialize
-This method initializes the connection between the Python scripts and the VideometerLab instrument. If a connection can not be established it is retried a number of times. This behavior cna be controlled by parameters in the top of the file VideometerLabDevice.py.
+This method initializes the connection between the Python scripts and the VideometerLab instrument. If a connection cannot be established it is retried a number of times. This behavior can be controlled by parameters in the top of the file VideometerLabDevice.py.
 
 ## Capture Image
-This method tells the VideometerLab instrument to capture an image. This image is analysed according to the loaded recipe. This method returns once the image have been captured and before the analysis begins.
+This method tells the VideometerLab instrument to capture an image. This image is analyzed according to the loaded recipe. This method returns once the image has been captured and before the analysis begins.
 
 ## Wait For Analysis Complete
 This method waits for the current analysis to finish. If the VideometerLab instrument is currently analyzing an image, then this method waits for this analysis to finish. If the VideometerLab instrument is not currently analyzing an image, this method returns immediately.  
@@ -123,7 +123,7 @@ This method waits until the VideometerLab sphere has moved all the way up. If th
 A timeout parameter is provided that specifies the maximum time this method is allowed to wait before throwing an exception.
 
 ## Check If Last Image Failed
-This method asks the VideometerLab software if the analysis of the previous image was successful or not. If the analysis of the previous image failed, an exception is throw containing an error message. This error message is identical to the error message shown in the VideometerLab software. This method can be used to make automatic decisions on how to handle analysis errors based on the individual error message.
+This method asks the VideometerLab software if the analysis of the previous image was successful or not. If the analysis of the previous image failed, an exception is thrown containing an error message. This error message is identical to the error message shown in the VideometerLab software. This method can be used to make automatic decisions on how to handle analysis errors based on the individual error message.
 
 ## LoadLightSetup
 Loads a specified light setup into the device. The name of the light setup is passed as an argument. The light setup must be saved in the active workspace.
@@ -141,43 +141,43 @@ Videometer provides a Python class called VideometerLabDevice as well as scripts
 This file contains a Python implementation that can be used to control the VideometerLab instrument. All variables are defined at the top of the file, and it is not generally necessary to modify this file. All below scripts use the VideometerLabDevice class defined in this file.
 
 ## CaptureImage.py
-This script do the following:
-* Connected to the VideometerLab instrument
-* Waited for any ongoing analysis to finish
+This script does the following:
+* Connects to the VideometerLab instrument
+* Waits for any ongoing analysis to finish
 * Captures a new image and starts the analysis according to the loaded recipe
 * Waits for the VideometerLab sphere to move all the way up
 
 ## WaitForSphereUp.py
 This script does the following:
-* Connected to the VideometerLab instrument
+* Connects to the VideometerLab instrument
 * Waits for the VideometerLab sphere to move all the way up
 
-If the VideometerLab sphere is already all the way up then this script immediately.
+If the VideometerLab sphere is already all the way up then this script returns immediately.
 
 ## DidLastImageFail.py
 This script does the following:
-* Connected to the VideometerLab instrument
+* Connects to the VideometerLab instrument
 * Checks if the analysis of the previous image was successful or not.
 
-If the analysis of the previous image failed an exception is throw containing an error message. This error message is identical to the error message shown in the VideometerLab software. This method can be used to make automatic decisions on how to handle analysis errors based on the individual error message.
+If the analysis of the previous image failed an exception is thrown containing an error message. This error message is identical to the error message shown in the VideometerLab software. This method can be used to make automatic decisions on how to handle analysis errors based on the individual error message.
 
 ## LoadLightSetup.py
 This script does the following:
-* Connected to the VideometerLab instrument
+* Connects to the VideometerLab instrument
 * Loads a specified light setup into the device.
 
 ## SaveLightSetup.py
 This script does the following:
-* Connected to the VideometerLab instrument
+* Connects to the VideometerLab instrument
 * Saves the active light setup to the active workspace
 
 ## DoAutoLight.py
 This script does the following:
-* Connected to the VideometerLab instrument
+* Connects to the VideometerLab instrument
 * Performs an automatic light setup.
 
 ## Suggested User Flow
-The Python scripts are written for an application where a robotic system is placing presenting samples to the VideometerLab instrument. This robotic system can execute the Python scripts as it means of communication with the VideometerLab instrument.  
+The Python scripts are written for an application where a robotic system is presenting samples to the VideometerLab instrument. This robotic system can execute the Python scripts as its means of communication with the VideometerLab instrument.  
 The suggested user flow is as follows:
 1. The human operator manually starts the VideometerLab Session and loads the necessary recipe
 2. Before the robot presents the first sample to the VideometerLab instrument, it calls the Python script "WaitForSphereUp.py" to ensure the VideometerLab sphere is up and thereby that the robot does not collide with the sphere.
@@ -185,7 +185,7 @@ The suggested user flow is as follows:
 4. The robot calls the Python script "CaptureImage.py" to capture an image and start the analysis. Once the script returns, the robot can safely remove the sample again.
 5. Repeat from step 3.
 
-Optionally, a call to the Python script "DidLastImageFail.py" can be added between step 4 and 5 and any custom error handling be done here.
+Optionally, a call to the Python script "DidLastImageFail.py" can be added between step 4 and 5 and any custom error handling can be done here.
 
 # REST API implementation for controlling Session
 
@@ -195,7 +195,7 @@ The "ExternalRestSessionController" exposes the same commands as the serial impl
 
 The REST API is intended for use on a closed, internal network only, for example a dedicated connection or a separate network segment between the VideometerLab PC and a robot, PLC or PC that controls it. It is not intended to be reachable from an office network, from the internet, or from any network with devices or users that are not trusted.
 
-The API has no authentication and no encryption. Every device that can reach the port can control the instrument, including starting a capture, which moves the sphere. Protection against unauthorised access is therefore not provided by the API, and must be provided by the network it is connected to, for example by network separation and firewall rules.
+The API has no authentication and no encryption. Every device that can reach the port can control the instrument, including starting a capture, which moves the sphere. Protection against unauthorized access is therefore not provided by the API, and must be provided by the network it is connected to, for example by network separation and firewall rules.
 
 ## Overview of the API
 
@@ -268,7 +268,7 @@ This flow is for an application where a robotic system presents samples to the V
 7. The client sends POST /wait-for-analysis-complete. When the answer is status code 200, the analysis of the image has finished without errors.
 8. Repeat from step 4.
 
-The next POST /capture must not be sent before step 7 has been answered. The Session cannot capture a new image while it is still analysing the previous one, and answers such a POST /capture with status code 409.
+The next POST /capture must not be sent before step 7 has been answered. The Session cannot capture a new image while it is still analyzing the previous one, and answers such a POST /capture with status code 409.
 
 Handling of answers that are not status code 200:
 * 500 from POST /capture or POST /wait-for-analysis-complete: the image failed. `message` holds the error message that is also shown in the VideometerLab software. GET /last-image returns the same information. The next sample can be captured as normal.
@@ -414,7 +414,7 @@ Date: Tue, 24 Nov 2026 10:51:07 GMT
 # Technical details
 
 ## Setup for making and using your own C# controller
-To make your own session controller in C# you have to make a new class and inherent from the abstract class "ExternalSessionController". You then compile your dll and copy it into the VideometerLab installation folder. When you start Session, your external Session controller can now be used.  
+To make your own session controller in C# you have to make a new class and inherit from the abstract class "ExternalSessionController". You then compile your dll and copy it into the VideometerLab installation folder. When you start Session, your external Session controller can now be used.  
 An example of this can be found in the "ExternalSerialSessionController" class.
 
 ## Setup for use of the REST API controller
@@ -455,10 +455,10 @@ You can customize our Python scripts to your liking. To make your own Session co
 * Use the "VM.Lab.Session.ExternalSerialSessionController.dll" as provided, but modify the Python scripts to your needs.
 * Change the source code for the "ExternalSerialSessionController" class and modify the Python scripts to your needs.
 
-You will need to import the Python library's "serial" and "time" to modify the VideometerLabDevice class.
+You will need to import the Python libraries "serial" and "time" to modify the VideometerLabDevice class.
 
 ## Session state machine
-The diagram below slows the Session state machine. These states can be used for custom implementation of the Session controllers.
+The diagram below shows the Session state machine. These states can be used for custom implementation of the Session controllers.
 
 ![](Session-StateMachineVisualizationGraph-01-September-2026.svg)
 
@@ -499,16 +499,16 @@ The communication protocol handles messages between the VideometerLab Session an
 
 Videometer provides the following:
 * An abstract C# class "SessionController" which anyone can inherit from and make a custom implementation.
-* A C# implementation called "SerialSessionController" that communicates over a serial connection with Phyton scripts that can control the Session.
-  * Corresponding Phyton scripts to control the Session.
+* A C# implementation called "SerialSessionController" that communicates over a serial connection with Python scripts that can control the Session.
+  * Corresponding Python scripts to control the Session.
 
 Both implementations work by controlling the Session by calling methods on the "ISessionControllerListener" interface.
 
 # Generic C# controller for Session
-Below is listed the methods that are exposed by the generic C# controller that can be used to control Session from C# code.
+Below are listed the methods that are exposed by the generic C# controller that can be used to control Session from C# code.
 
 ## Start
-Starts a new measurement. This corresponds to using the play/start button in the GUI. An image is captured, analysed and the result is shown on screen.
+Starts a new measurement. This corresponds to using the play/start button in the GUI. An image is captured, analyzed and the result is shown on screen.
 The command takes the following arguments:
 * Sample Id
 * Operator initials
@@ -522,10 +522,10 @@ Pauses the current measurement. This corresponds to using the pause button in th
 Finishes the current measurement. This corresponds to using the finish button in the GUI. There are no arguments to this method.
 
 ## New
-Cleares the GUI and makes ready for beginning new measurements. This corresponds to using the new button in the GUI. There are no arguments to this method.
+Clears the GUI and makes ready for beginning new measurements. This corresponds to using the new button in the GUI. There are no arguments to this method.
 
 ## State Changed
-This method is called when ever the internal Session state changes. See diagram below.
+This method is called whenever the internal Session state changes. See diagram below.
 
 ## Last Image Failed
 This method is called if the capture or analysis of an image fails. This can be used to transfer the error message to the external controller and have the external controller decide how to handle the error.
@@ -538,75 +538,75 @@ This section explains an example of an external Session controller written in Py
 
 It works by communicating over a serial connection between the "SerialSessionController" and the Python scripts.    
 Both the "SerialSessionController" and the Python scripts can be edited and customized to your needs/application.
-Both is supplied in the Releases section.
+Both are supplied in the Releases section.
 
 
 ## Initialize
-This method initializes the connection between the Python scripts and the VideometerLab instrument. If a connection can not be established it is retried a number of times. This behavior cna be controlled by parameters in the top of the file VideometerLabDevice.py.
+This method initializes the connection between the Python scripts and the VideometerLab instrument. If a connection cannot be established it is retried a number of times. This behavior can be controlled by parameters in the top of the file VideometerLabDevice.py.
 
 ## Capture Image
-This method tells the VideometerLab instrument to capture an image. This image is analysed according to the loaded recipe. This method returns once the image have been captured and before the analysis begins.
+This method tells the VideometerLab instrument to capture an image. This image is analyzed according to the loaded recipe. This method returns once the image has been captured and before the analysis begins.
 
 ## Wait For Analysis Complete
-This method waits for the current analysis ot finish. If the VideometerLab instrument is currently analysing an image then this method waits for this analysis to finish. If the VideometerLab instrument is not currently analysing  an image this method returns immediately.  
-A timeout parameter is provided the specifies the maximum time this method is allowed ot wait before throwing an exception.
+This method waits for the current analysis to finish. If the VideometerLab instrument is currently analyzing an image then this method waits for this analysis to finish. If the VideometerLab instrument is not currently analyzing an image this method returns immediately.  
+A timeout parameter is provided that specifies the maximum time this method is allowed to wait before throwing an exception.
 
 ## Wait For Sphere Up
-This method waits until the VideometerLab sphere have moved all the way up. If the VideometerLab sphere is already in its up position then this method returns immediately.  
-A timeout parameter is provided the specifies the maximum time this method is allowed ot wait before throwing an exception.
+This method waits until the VideometerLab sphere has moved all the way up. If the VideometerLab sphere is already in its up position then this method returns immediately.  
+A timeout parameter is provided that specifies the maximum time this method is allowed to wait before throwing an exception.
 
 ## Check If Last Image Failed
-This method askes the VideometerLab software if the analysis of the previous image was successful or not. If the analysis of the previous image failed an exception is throw containing an error message. This error message is identical to the error message shown in the VideometerLab software. This method can be used to make automatic decisions on how to handle analysis errors based on the individual error message.
+This method asks the VideometerLab software if the analysis of the previous image was successful or not. If the analysis of the previous image failed an exception is thrown containing an error message. This error message is identical to the error message shown in the VideometerLab software. This method can be used to make automatic decisions on how to handle analysis errors based on the individual error message.
 
 # Python scripts
 Videometer provides a Python class called VideometerLabDevice as well as scripts that use this class. These scripts are provided open-source, free of charge and the user can freely customize them to their specific needs.
 
 ## VideometerLabDevice.py
-This file contains a Python implementation that can be used to control the VideometerLab instrument. All variables are defined at the top of the file, and it is not generally needed to modify this file. All below scripts uses the VideometerLabDevice class defined in this file.
+This file contains a Python implementation that can be used to control the VideometerLab instrument. All variables are defined at the top of the file, and it is not generally needed to modify this file. All below scripts use the VideometerLabDevice class defined in this file.
 
 ## CaptureImage.py
-This script do the following:
-* Connected to the VideometerLab instrument
-* Waited for any ongoing analysis to finish
+This script does the following:
+* Connects to the VideometerLab instrument
+* Waits for any ongoing analysis to finish
 * Captures a new image and starts the analysis according to the loaded recipe
 * Waits for the VideometerLab sphere to move all the way up
 
 ## WaitForSphereUp.py
-This script do the following:
-* Connected to the VideometerLab instrument
+This script does the following:
+* Connects to the VideometerLab instrument
 * Waits for the VideometerLab sphere to move all the way up
 
-If the VideometerLab sphere is already all the way up then this script immediately.
+If the VideometerLab sphere is already all the way up then this script returns immediately.
 
 ## DidLastImageFail.py
-This script do the following:
-* Connected to the VideometerLab instrument
+This script does the following:
+* Connects to the VideometerLab instrument
 * Checks if the analysis of the previous image was successful or not.
 
-If the analysis of the previous image failed an exception is throw containing an error message. This error message is identical to the error message shown in the VideometerLab software. This method can be used to make automatic decisions on how to handle analysis errors based on the individual error message. 
+If the analysis of the previous image failed an exception is thrown containing an error message. This error message is identical to the error message shown in the VideometerLab software. This method can be used to make automatic decisions on how to handle analysis errors based on the individual error message. 
 
 ## Suggested User Flow
-The Python scripts is written for an application where a robotic system is placing presenting samples to the VideometerLab instrument. This robotic system can execute the Python scripts as it means of communication with the VideometerLab instrument.  
+The Python scripts are written for an application where a robotic system is presenting samples to the VideometerLab instrument. This robotic system can execute the Python scripts as its means of communication with the VideometerLab instrument.  
 The suggested user flow is as follows:
-1. The human operator manually starte the Videometer Session and loaded the needed recipe
-2. Before the robot presents the first sample to the VideometerLab instrument it calls the Python script "WaitForSphereUp.py" to ensure the VideometerLab sphere is up and thereby that the robot do not collide with the sphere.
+1. The human operator manually starts the VideometerLab Session and loads the needed recipe
+2. Before the robot presents the first sample to the VideometerLab instrument it calls the Python script "WaitForSphereUp.py" to ensure the VideometerLab sphere is up and thereby that the robot does not collide with the sphere.
 3. The robot presents a sample in the VideometerLab instrument and moves away so the sphere can move down without colliding with the robot arm.
 4. The robot calls the Python script "CaptureImage.py" to capture an image and start the analysis. Once the script returns the robot can safely remove the sample again.
 5. Repeat from step 3.
 
-Optionally a call to the Python script "DidLastImageFail.py" can be added between step 4 and 5 and any custom error handling be done here.
+Optionally a call to the Python script "DidLastImageFail.py" can be added between step 4 and 5 and any custom error handling can be done here.
 
 # Technical details
 
 ## Setup for making and using your own C# controller
-In order to use make your own session controller in C# you simply have to make a new class and inherent from the abstract class "SessionController". You then compile your dll and copy it into the VideometerLab installation folder. When you start Session your external Session controller can now be used.  
+In order to make your own session controller in C# you simply have to make a new class and inherit from the abstract class "SessionController". You then compile your dll and copy it into the VideometerLab installation folder. When you start Session your external Session controller can now be used.  
 An example of this can be found in the "SerialSessionController" class.
 
 ## Setup for use of Python controller
 In order to use our Python controller you need to copy the dll "VM.Lab.Session.SerialSessionController.dll" into the VideometerLab installation folder. When you start Session you can now send commands to the VideometerLab instrument by executing the provided Python scripts.
 
 Note that: 
-* The Python scripts assume that the VideometerLab PC and the external PC is connected by a serial cable.
+* The Python scripts assume that the VideometerLab PC and the external PC are connected by a serial cable.
 * You will need to adjust the COM port number in the top of the file "VideometerLabDevice.py" to be the COM port number of the VideometerLab device.
 * You will need to change the COM port number assigned by Windows to COM2 for the COM port on the PC that is connected to the external controller.
 
@@ -628,9 +628,9 @@ You can customize our Python scripts to your liking. In order to make your own S
 * Simply use the "VM.Lab.Session.SerialSessionController.dll" as provided, but modify the Python scripts to your needs.
 * Change the source code for the "SerialSessionController" class and modify the Python scripts to your needs.
 
-You will need to import the Python library's "serial" and "time" to modify the VideometerLabDevice class.
+You will need to import the Python libraries "serial" and "time" to modify the VideometerLabDevice class.
 
 ## Session state machine
-The diagram below slows the Session state machine. These state can be used for custom implementation of the Session controllers.
+The diagram below shows the Session state machine. These states can be used for custom implementation of the Session controllers.
 
 ![](Session_StateMachine_Old.png)
