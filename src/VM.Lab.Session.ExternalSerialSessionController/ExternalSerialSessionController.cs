@@ -27,7 +27,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     private const string AcknowledgeAdjustingLightSetupFailedKeyWord = "AcknowledgeAdjustingLightSetupFailed";
 
     /// <summary>
-    /// Prefix on every response that reports the outcome of a command we did receive and understand.
+    /// Prefix on every response that reports that a command we did receive and understand did not succeed.
     /// It tells the caller not to send the command again, because doing so would only repeat the outcome.
     /// </summary>
     private const string CommandFailedPrefix = "FAILED: ";
@@ -40,7 +40,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     private volatile bool _disposed;
 
     /// <summary>
-    /// True from a capture command is issued until the session reports <see cref="SessionState.Capturing"/>.
+    /// True from when a capture command is issued until the session reports <see cref="SessionState.Capturing"/>.
     /// Until then no state counts as "the capture is finished": the session can report the state it was
     /// already in once more before it starts capturing, and that must not be mistaken for the image being done.
     /// </summary>
@@ -85,7 +85,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     /// <summary>
     /// Constructs the external session controller. This method is called internally by the VideometerLab software. 
     /// </summary>
-    /// <param name="listener">The session listener that is use to provide commands to the session</param>
+    /// <param name="listener">The session listener that is used to provide commands to the session</param>
     public ExternalSerialSessionController(IExternalSessionControllerListener listener) : base(listener)
     {
         const string port = "COM2";
@@ -104,7 +104,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     }
 
     /// <summary>Occurs when a session state has changed</summary>
-    /// <param name="newState"></param>
+    /// <param name="newState">The state the session is in now</param>
     public override void StateChanged(SessionState newState)
     {
         lock (_stateLock)
@@ -143,12 +143,12 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     /// </summary>
     private void ReleaseWaitsFinishedIn(SessionState state)
     {
-        // A failure state never releases a waiter, even though it does end the command. Releasing here
-        // would race with the reason being reported: a waiter could wake and read the failure while
-        // it is still empty, and so report a failed command as a success. ProvideErrorMessage does the
-        // releasing instead, after it has recorded the reason.
-        // The exception is a failed light setup adjustment whose reason is already recorded: the session is now
-        // where the failure can be acknowledged, so this is the moment to answer the command.
+        // A failure state does not release a waiter by itself, even though it does end the command. Releasing
+        // here would race with the reason being reported: a waiter could wake and read the failure while it is
+        // still empty, and so report a failed command as a success. A waiter is released where the reason is
+        // known: in ProvideErrorMessage for a failed image, and here for a failed light setup adjustment whose
+        // reason is already recorded. For the latter the session is now where the failure can be acknowledged,
+        // so this is the moment to answer the command.
         var failedLightSetupCanBeAcknowledged = state == SessionState.AdjustingLightSetupFailed
                                                 && _lightSetupFailure != null
                                                 && !_awaitingAdjustingLightSetup;
@@ -164,7 +164,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
 
         if (state != SessionState.Capturing && !_awaitingCapturing)
         {
-            // The image is in hand
+            // The capture is over: the image is in hand, or the capture was stopped
             _captureComplete.Set();
 
             // Processing is the only remaining step between a captured image and a usable result,
@@ -377,7 +377,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
                     Thread.Sleep(500);
                 }
 
-                // If sphere is still not up then we timed out
+                // If the sphere is still not up, we timed out or the Session was closed
                 if (!sphereHeightOk)
                 {
                     var message = $"Failed waiting for sphere to move up. Waited {sphereUpTimeoutMs}ms.";
@@ -474,9 +474,8 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     }
 
     /// <summary>
-    /// Sends one answer to the caller. The port is closed when the session is, and a command can still be
-    /// on its way to answer at that moment. An exception here would escape onto the serial port's event
-    /// thread, where nothing can report it and it takes the process down, so it is logged instead.
+    /// Sends one answer to the caller. A failed write is logged and not thrown: an exception here would
+    /// escape onto the serial port's event thread, where nothing can report it and it takes the process down.
     /// </summary>
     private void WriteResponse(string response)
     {
@@ -559,7 +558,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
 
             _awaitingCapturing = false;
 
-            // A failure reported in the meantime belongs to the earlier image and is the newer news, so keep it.
+            // A failure reported in the meantime belongs to the earlier image and is more recent, so keep it.
             _imageFailure = _imageFailure ?? before.ImageFailure;
             if (before.CaptureComplete)
             {
@@ -676,13 +675,13 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     /// Waiting on the event rather than polling the state matters for correctness, not just for efficiency:
     /// the session can pass through a state faster than a poll loop can observe it — a capture from a folder
     /// or a cached device can run all the way back to Ready before <c>Capture</c> even returns — whereas a
-    /// signaled event is still signaled whenever we get round to waiting on it.
+    /// signaled event is still signaled when the wait starts later.
     /// </para>
     /// <para>
-    /// A failure counts as finished, so the wait ends promptly with the reason instead of running out the whole
-    /// timeout waiting for a state that is never coming. That matters most for a failed light setup
-    /// adjustment: the session stays in AdjustingLightSetupFailed until it is acknowledged, so no further
-    /// state change would ever arrive.
+    /// A failure counts as finished, so the wait ends with the reason instead of running out the whole
+    /// timeout waiting for a state that is never coming. A failed image ends the wait when its reason is
+    /// reported. A failed light setup adjustment ends it when the session has reached
+    /// AdjustingLightSetupFailed, where the failure can be acknowledged.
     /// </para>
     /// </summary>
     /// <returns>
@@ -725,9 +724,8 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
     }
     
     /// <summary>
-    /// Called id an error happens, for example, something in the pipeline of capturing, analyzing, or saving of results, failed for the current image.
-    /// Used to inform external controllers that something went wrong. 
-    /// Used to inform external controllers that something went wrong. 
+    /// Called if an error happens, for example, something in the pipeline of capturing, analyzing, or saving of results, failed for the current image.
+    /// Used to inform external controllers that something went wrong.
     /// </summary>
     /// <param name="errorMessage">Error message explaining what failed</param>
     public override void ProvideErrorMessage(string errorMessage)
@@ -738,8 +736,8 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
             // for the adjustment whose caller has already timed out and gone.
             var lightSetupFailed = _lightSetupCommandInFlight || _state == SessionState.AdjustingLightSetup;
 
-            // Whatever was in flight is finished, so release anyone waiting on it. Set after the reason is
-            // recorded, so a released waiter is guaranteed to see it.
+            // Whatever was in flight has failed. The reason is recorded before anyone waiting on it is
+            // released, so a released waiter is guaranteed to see it.
             if (lightSetupFailed)
             {
                 _lightSetupFailure = errorMessage ?? string.Empty;
@@ -779,7 +777,7 @@ public class ExternalSerialSessionController : ExternalSessionController, INeedS
         _serialPort.DataReceived -= SerialPort_DataReceived;
         _serialPort?.Dispose();
 
-        // Release anyone still blocked before disposing, so the wait ends rather than throwing.
+        // Release anyone still blocked before the wait handles are disposed, so the wait ends rather than throwing.
         _captureComplete.Set();
         _analysisComplete.Set();
         _lightSetupAdjustmentComplete.Set();

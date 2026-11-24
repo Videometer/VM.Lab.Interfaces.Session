@@ -11,6 +11,6 @@ try:
     device.Initialize()
     autoLightTimeoutSeconds = 30 # Unit is seconds
     device.DoAutoLight(autoLightTimeoutSeconds)
-    print(f"Script complete: Auto light done and the found light setup is in use") # Usefull when debugging
+    print(f"Script complete: Auto light done and the found light setup is in use") # Useful when debugging
 finally:
     device.CloseComPort()

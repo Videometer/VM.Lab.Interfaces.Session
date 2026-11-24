@@ -24,7 +24,7 @@ internal sealed record TimeoutRequest(int TimeoutSeconds);
 /// <param name="TimeoutSeconds">How long to wait for the light setup adjustment to finish</param>
 internal sealed record LightSetupRequest(string LightSetupName, int TimeoutSeconds);
 
-/// <summary>Answer to every command</summary>
+/// <summary>Answer to every command, and to a query that fails</summary>
 /// <param name="Success">True if the command did what it was asked to</param>
 /// <param name="Message">What happened, or why it did not</param>
 internal sealed record CommandResponse(bool Success, string Message);

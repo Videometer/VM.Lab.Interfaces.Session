@@ -7,14 +7,14 @@ public abstract class ExternalSessionController : IDisposable
     protected readonly IExternalSessionControllerListener _listener;
 
     /// <summary>An agent that controls sessions</summary>
-    /// <param name="listener"></param>
+    /// <param name="listener">Implementer of session control commands</param>
     protected ExternalSessionController(IExternalSessionControllerListener listener)
     {
         _listener = listener;
     }
 
     /// <summary>Occurs when the state has changed</summary>
-    /// <param name="newState"></param>
+    /// <param name="newState">The state the session is in now</param>
     public abstract void StateChanged(SessionState newState);
 
     /// <summary>

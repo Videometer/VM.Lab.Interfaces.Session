@@ -11,6 +11,6 @@ try:
     device.Initialize()
     loadLightSetupTimeoutSeconds = 5 # Unit is seconds
     device.LoadLightSetup(lightSetupName, loadLightSetupTimeoutSeconds)
-    print(f"Script complete: Light setup {lightSetupName} is loaded") # Usefull when debugging
+    print(f"Script complete: Light setup {lightSetupName} is loaded") # Useful when debugging
 finally:
     device.CloseComPort()

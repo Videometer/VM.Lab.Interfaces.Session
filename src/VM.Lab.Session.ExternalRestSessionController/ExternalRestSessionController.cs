@@ -70,7 +70,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     private int _requestsInFlight;
 
     /// <summary>
-    /// True from a capture command is issued until the session reports <see cref="SessionState.Capturing"/>.
+    /// True from when a capture command is issued until the session reports <see cref="SessionState.Capturing"/>.
     /// Until then no state counts as "the capture is finished": the session can report the state it was
     /// already in once more before it starts capturing, and that must not be mistaken for the image being done.
     /// </summary>
@@ -95,7 +95,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     /// Constructs the external session controller and starts the REST API.
     /// This method is called internally by the VideometerLab software.
     /// </summary>
-    /// <param name="listener">The session listener that is use to provide commands to the session</param>
+    /// <param name="listener">The session listener that is used to provide commands to the session</param>
     public ExternalRestSessionController(IExternalSessionControllerListener listener) : base(listener)
     {
         _routes = new Dictionary<string, Func<HttpListenerRequest, RestAnswer>>(StringComparer.OrdinalIgnoreCase)
@@ -164,7 +164,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         return httpListener;
     }
 
-    /// <summary>Hands every incoming request to its own thread, so a blocking command does not hold up the others.</summary>
+    /// <summary>Hands every incoming request to the thread pool, so a blocking command does not hold up the others.</summary>
     private void AcceptRequests()
     {
         while (true)
@@ -176,7 +176,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
             }
             catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException)
             {
-                // The listener was stopped by Dispose
+                // The listener has stopped, normally because of Dispose, so there is nothing more to accept
                 return;
             }
 
@@ -279,7 +279,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     }
 
     /// <summary>Occurs when a session state has changed</summary>
-    /// <param name="newState"></param>
+    /// <param name="newState">The state the session is in now</param>
     public override void StateChanged(SessionState newState)
     {
         lock (_stateLock)
@@ -318,12 +318,12 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     /// </summary>
     private void ReleaseWaitsFinishedIn(SessionState state)
     {
-        // A failure state never releases a waiter, even though it does end the command. Releasing here
-        // would race with the reason being reported: a waiter could wake and read the failure while
-        // it is still empty, and so report a failed command as a success. ProvideErrorMessage does the
-        // releasing instead, after it has recorded the reason.
-        // The exception is a failed light setup adjustment whose reason is already recorded: the session is now
-        // where the failure can be acknowledged, so this is the moment to answer the command.
+        // A failure state does not release a waiter by itself, even though it does end the command. Releasing
+        // here would race with the reason being reported: a waiter could wake and read the failure while it is
+        // still empty, and so report a failed command as a success. A waiter is released where the reason is
+        // known: in ProvideErrorMessage for a failed image, and here for a failed light setup adjustment whose
+        // reason is already recorded. For the latter the session is now where the failure can be acknowledged,
+        // so this is the moment to answer the command.
         var failedLightSetupCanBeAcknowledged = state == SessionState.AdjustingLightSetupFailed
                                                 && _lightSetupFailure != null
                                                 && !_awaitingAdjustingLightSetup;
@@ -339,7 +339,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
 
         if (state != SessionState.Capturing && !_awaitingCapturing)
         {
-            // The image is in hand
+            // The capture is over: the image is in hand, or the capture was stopped
             _captureComplete.Set();
 
             // Processing is the only remaining step between a captured image and a usable result,
@@ -370,8 +370,8 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
             // for the adjustment whose caller has already timed out and gone.
             var lightSetupFailed = _lightSetupCommandInFlight || _state == SessionState.AdjustingLightSetup;
 
-            // Whatever was in flight is finished, so release anyone waiting on it. Set after the reason is
-            // recorded, so a released waiter is guaranteed to see it.
+            // Whatever was in flight has failed. The reason is recorded before anyone waiting on it is
+            // released, so a released waiter is guaranteed to see it.
             if (lightSetupFailed)
             {
                 _lightSetupFailure = errorMessage ?? string.Empty;
@@ -665,7 +665,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
 
             _awaitingCapturing = false;
 
-            // A failure reported in the meantime belongs to the earlier image and is the newer news, so keep it.
+            // A failure reported in the meantime belongs to the earlier image and is more recent, so keep it.
             _imageFailure ??= before.ImageFailure;
             if (before.CaptureComplete)
             {
@@ -738,7 +738,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     /// <para>
     /// Waiting on the event rather than polling the state matters for correctness, not just for efficiency:
     /// the session can pass through a state faster than a poll loop can observe it, whereas a signaled event
-    /// is still signaled whenever we get round to waiting on it.
+    /// is still signaled when the wait starts later.
     /// </para>
     /// </summary>
     /// <param name="completed">Signaled when the step is over</param>

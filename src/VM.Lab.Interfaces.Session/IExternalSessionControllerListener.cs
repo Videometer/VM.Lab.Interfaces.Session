@@ -3,7 +3,7 @@
 /// <summary>Interface for controlling a session</summary>
 public interface IExternalSessionControllerListener
 {
-    /// <summary>Start a new measurement</summary>
+    /// <summary>Captures an image, analyzes it and shows the result</summary>
     /// <param name="id">ID of the sample</param>
     /// <param name="initials">Operator initials</param>
     /// <param name="comments">Operator comments</param>

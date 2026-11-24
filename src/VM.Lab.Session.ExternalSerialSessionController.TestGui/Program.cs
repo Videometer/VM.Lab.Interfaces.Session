@@ -17,10 +17,9 @@ listener.LightSetupAdjusted += (_, _) =>
 {
     controller.StateChanged(SessionState.AdjustingLightSetup);
 
-    // Simulate a failure. ProvideErrorMessage is what ends the caller's wait — a failure state does not,
-    // because signalling there would race with the reason being reported. The session reports the reason
-    // from inside the light-setup work, before returning the result that moves the state, so report it
-    // first here too. Leave it out and the caller waits out its whole timeout.
+    // Simulate a failure. The real session reports the reason from inside the light-setup work, before it
+    // moves to the failure state, so report it first here too. The controller needs both: leave the reason
+    // out and the caller waits out its whole timeout.
 
     Task.Run(() =>
     {

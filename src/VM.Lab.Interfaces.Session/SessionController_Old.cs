@@ -7,7 +7,7 @@
 		protected readonly ISessionControllerListener_Old _listener;
 
 		/// <summary>An agent that controls sessions</summary>
-		/// <param name="listener"></param>
+		/// <param name="listener">Implementer of session control commands</param>
 		public SessionController_Old(ISessionControllerListener_Old listener)
 		{
 			_listener = listener;
@@ -17,8 +17,8 @@
 		/// Occurs when the state has changed
 		/// Use to enable buttons / filter what signals are allowed.
 		/// </summary>
-		/// <param name="previousState"></param>
-		/// <param name="newState"></param>
+		/// <param name="previousState">The state the session was in</param>
+		/// <param name="newState">The state the session is in now</param>
 		public abstract void StateChanged(SessionState_Old previousState, SessionState_Old newState);
 
 		/// <summary>

@@ -5,8 +5,8 @@ using VM.Lab.Interfaces.Session;
 namespace VM.Lab.Session.SerialSessionController;
 
 /// <summary>
-/// Concrete implementation of a external session controller that is controlled by an external device that
-/// communicate with this controller using serial communication over a COM port. 
+/// Concrete implementation of an external session controller that is controlled by an external device that
+/// communicates with this controller using serial communication over a COM port. 
 /// </summary>
 public class SerialSessionController_Old : SessionController_Old, INeedSphereHeightProvider
 {
@@ -27,7 +27,7 @@ public class SerialSessionController_Old : SessionController_Old, INeedSphereHei
     private string _lastErrorMessage;
 
     /// <summary>
-    /// True from a capture command is issued until the session reports
+    /// True from when a capture command is issued until the session reports
     /// <see cref="SessionState_Old.CAPTURE_SINGLE_FRAME"/>. Until then the state is the one the previous image
     /// left behind, and must not be mistaken for this image being captured.
     /// </summary>
@@ -50,7 +50,7 @@ public class SerialSessionController_Old : SessionController_Old, INeedSphereHei
     /// <summary>
     /// Constructs the external session controller. This method is called internally by the VideometerLab software. 
     /// </summary>
-    /// <param name="listener">The session listener that is use to provide commands to the session</param>
+    /// <param name="listener">The session listener that is used to provide commands to the session</param>
     public SerialSessionController_Old(ISessionControllerListener_Old listener) : base(listener)
     {
         const string port = "COM2";
@@ -69,8 +69,8 @@ public class SerialSessionController_Old : SessionController_Old, INeedSphereHei
     }
 
     /// <summary>Occurs when a session state has changed</summary>
-    /// <param name="previousState"></param>
-    /// <param name="newState"></param>
+    /// <param name="previousState">The state the session was in</param>
+    /// <param name="newState">The state the session is in now</param>
     public override void StateChanged(SessionState_Old previousState, SessionState_Old newState)
     {
         lock (_stateLock)

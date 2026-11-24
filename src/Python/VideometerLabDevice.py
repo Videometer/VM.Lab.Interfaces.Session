@@ -9,12 +9,12 @@ defaultWriteTimeout = 3
 initializeRetries = 3
 # The time in seconds to wait in between trying to connect to the VideometerLab instrument and check for the "is ready" status
 secondsToWaitBetweenInitializeRetries = 5
-# The maximum number of times ot try and resend a command if the sending of the command fails or if the response is not the expected.
+# The maximum number of times to try and resend a command if the sending of the command fails or if the response is not the expected.
 sendCommandMaxRetries = 3
 # The com port to connect to. I.e. the com port that the VideometerLab instrument is connected to.
 comPort = 'COM1'
 # How much longer than the instrument's own wait to keep reading for its response.
-# Commands that carry a timeout are answered by the instrument when that timeout runs out, so without this aditional
+# Commands that carry a timeout are answered by the instrument when that timeout runs out, so without this additional
 # wait time the two deadlines coincide: the read can expire a moment before the answer arrives, which hides the real
 # reason and — because an empty read counts as retryable — resends the command into a session that is still busy.
 secondsToReadBeyondTheInstrumentsTimeout = 1
@@ -107,7 +107,7 @@ class VideometerLabDevice(object):
         print(error_message)
 
         if read.startswith(commandFailedPrefix):
-            # The instrument received and understood the command and is reporting its outcome, so there iscl
+            # The instrument received and understood the command and is reporting its outcome, so there is
             # nothing to gain by sending it again.
             raise VideometerLabCommandFailed(error_message)
 
@@ -149,7 +149,7 @@ class VideometerLabDevice(object):
         self.SendCommandWithRetry(commandWithParameters, "SphereIsUp",
                                   sphereUpTimeoutSeconds + secondsToReadBeyondTheInstrumentsTimeout)
            
-    # If the analysis of the last image failed then an error message with detailes is thrown as an exception
+    # If the analysis of the last image failed then an error message with details is thrown as an exception
     def CheckIfLastImageFailed(self):
         self.SendCommandWithRetry("LastImageFailed", "False", defaultReadTimeout)
 

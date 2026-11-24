@@ -11,6 +11,6 @@ try:
     device.Initialize()
     saveLightSetupTimeoutSeconds = 5 # Unit is seconds
     device.SaveLightSetup(lightSetupName, saveLightSetupTimeoutSeconds)
-    print(f"Script complete: Light setup saved as {lightSetupName}") # Usefull when debugging
+    print(f"Script complete: Light setup saved as {lightSetupName}") # Useful when debugging
 finally:
     device.CloseComPort()

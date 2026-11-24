@@ -13,7 +13,7 @@ listener.CaptureCalled += (_, _) =>
     CaptureCalled();
 };
 
-// Simulate that the session window have been opened
+// Simulate that the session window has been opened
 controller.StateChanged(SessionState_Old.NONE, SessionState_Old.IDLE_SINGLE_FRAME); 
 
 while (true)

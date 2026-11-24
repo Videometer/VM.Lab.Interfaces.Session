@@ -9,6 +9,6 @@ device = VideometerLabDevice()
 try:
     device.Initialize()
     device.AcknowledgeAdjustingLightSetupFailed()
-    print(f"Script complete: The failed light setup adjustment is acknowledged") # Usefull when debugging
+    print(f"Script complete: The failed light setup adjustment is acknowledged") # Useful when debugging
 finally:
     device.CloseComPort()

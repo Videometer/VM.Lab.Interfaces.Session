@@ -7,7 +7,7 @@ public interface ISphereHeightProvider
 {
     /// <summary>
     /// Returns the current height of the VideometerLab sphere.
-    /// Unit is in in millimeters above the base plate where samples are placed.
+    /// Unit is millimeters above the base plate where samples are placed.
     /// </summary>
     int GetSphereHeight();
 }

@@ -8,6 +8,6 @@ device = VideometerLabDevice()
 try:
     device.Initialize()
     device.New()
-    print(f"Script complete: A new measurement is started") # Usefull when debugging
+    print(f"Script complete: A new measurement is started") # Useful when debugging
 finally:
     device.CloseComPort()

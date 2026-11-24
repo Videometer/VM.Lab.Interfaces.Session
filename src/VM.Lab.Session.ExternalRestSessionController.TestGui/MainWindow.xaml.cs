@@ -121,8 +121,8 @@ public partial class MainWindow : Window
                 Thread.Sleep(_simulatedLightSetupAdjustmentMs);
                 if (_lightSetupAdjustmentFails)
                 {
-                    // ProvideErrorMessage is what ends the caller's wait — a failure state does not. The
-                    // session reports the reason before it moves the state, so do the same here.
+                    // The real session reports the reason before it moves to the failure state, so do the
+                    // same here. The controller needs both: without the reason the caller waits out its timeout.
                     controller.ProvideErrorMessage("Simulated light setup adjustment failure");
                     controller.StateChanged(SessionState.AdjustingLightSetupFailed);
                 }
