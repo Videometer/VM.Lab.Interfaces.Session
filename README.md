@@ -37,6 +37,8 @@ This document is split into two sections.
   * [DoAutoLight.py](#doautolightpy)
   * [Suggested User Flow](#suggested-user-flow)
 * [REST API implementation for controlling Session](#rest-api-implementation-for-controlling-session)
+  * [Intended use](#intended-use)
+  * [Overview of the API](#overview-of-the-api)
   * [Endpoints](#endpoints)
   * [Responses](#responses)
   * [Example](#example)
@@ -187,9 +189,16 @@ Optionally, a call to the Python script "DidLastImageFail.py" can be added betwe
 
 The "ExternalRestSessionController" exposes the same commands as the serial implementation, as a REST API over HTTP. Any client that can send HTTP requests can control the Session.
 
+## Intended use
+
+The REST API is intended for use on a closed, internal network only, for example a dedicated connection or a separate network segment between the VideometerLab PC and a robot, PLC or PC that controls it. It is not intended to be reachable from an office network, from the internet, or from any network with devices or users that are not trusted.
+
+The API has no authentication and no encryption. Every device that can reach the port can control the instrument, including starting a capture, which moves the sphere. Protection against unauthorised access is therefore not provided by the API, and must be provided by the network it is connected to, for example by network separation and firewall rules.
+
+## Overview of the API
+
 * Base address: `http://<VideometerLab PC>:5080/api/v1`
 * Request and response bodies are JSON.
-* The API listens on all network interfaces and has no authentication and no encryption. Anyone who can reach the port can control the instrument, so only use it on a trusted network.
 * A POST without a body must still send the header `Content-Length: 0`, or Windows rejects it with status code 411. Most HTTP clients do this by themselves; with curl, add `-d ""`.
 * Commands that take time answer when the step has finished, failed or timed out. Set the HTTP client's timeout longer than the `timeoutSeconds` sent in the request.
 * Only one of the commands Capture, New and the light setup commands is processed at a time; a second one is answered with status code 423. Stop, the waits and the queries can be called while such a command is in progress.
