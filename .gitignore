@@ -6,3 +6,4 @@
 .idea/
 .vscode
 *DotSettings.User
+/src/Python/__pycache__/
