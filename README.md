@@ -192,7 +192,7 @@ The "ExternalRestSessionController" exposes the same commands as the serial impl
 * The API listens on all network interfaces and has no authentication and no encryption. Anyone who can reach the port can control the instrument, so only use it on a trusted network.
 * A POST without a body must still send the header `Content-Length: 0`, or Windows rejects it with status code 411. Most HTTP clients do this by themselves; with curl, add `-d ""`.
 * Commands that take time answer when the step has finished, failed or timed out. Set the HTTP client's timeout longer than the `timeoutSeconds` sent in the request.
-* Only one of the commands Capture, New and the light setup commands is processed at a time. Stop, the waits and the queries can be called while such a command is in progress.
+* Only one of the commands Capture, New and the light setup commands is processed at a time; a second one is answered with status code 423. Stop, the waits and the queries can be called while such a command is in progress.
 
 ## Endpoints
 
@@ -222,8 +222,11 @@ Every command answers with `{"success": true|false, "message": "..."}`.
 | 200         | The command succeeded.                                                                    |
 | 400         | The request is invalid, for example a missing body or `timeoutSeconds`.                   |
 | 403         | The request came from another PC, and the API is not set up for use from the network. See "Setup for use of the REST API controller". |
-| 409         | The Session refused the command, or another command is still being processed.             |
-| 500         | The step was started but failed. The message holds the error message from the Session.    |
+| 405         | The path exists, but not with this method. The `Allow` header holds the method to use.    |
+| 409         | The Session refused the command, because it is not valid in the current Session state.    |
+| 423         | Another command is still being processed. Send the command again when that has answered.  |
+| 500         | The step was started but failed, or an unexpected error happened. The message holds the error message from the Session. |
+| 501         | The Session does not support the command.                                                 |
 | 503         | The sphere height is not available.                                                       |
 | 504         | The step did not finish within `timeoutSeconds`. For /capture and the light setup commands this is also the answer if the Session never started the step. |
 

@@ -184,6 +184,10 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
             var body = JsonSerializer.SerializeToUtf8Bytes(answer.Body, answer.Body.GetType(), _jsonOptions);
             context.Response.StatusCode = (int)answer.StatusCode;
             context.Response.ContentType = "application/json; charset=utf-8";
+            if (answer.Allow != null)
+            {
+                context.Response.AddHeader("Allow", answer.Allow);
+            }
             context.Response.ContentLength64 = body.Length;
             context.Response.OutputStream.Write(body, 0, body.Length);
             context.Response.Close();
@@ -209,7 +213,16 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
 
         if (!_routes.TryGetValue(routeKey, out var route))
         {
-            return Answer(HttpStatusCode.NotFound, $"Unknown command: {routeKey}");
+            var allowedMethods = GetAllowedMethods(path);
+            if (allowedMethods.Length == 0)
+            {
+                return Answer(HttpStatusCode.NotFound, $"Unknown command: {routeKey}");
+            }
+
+            var allow = string.Join(", ", allowedMethods);
+            var wrongMethod = Answer(HttpStatusCode.MethodNotAllowed,
+                $"{path} must be called with {allow}, not {request.HttpMethod}.");
+            return wrongMethod with { Allow = allow };
         }
 
         try
@@ -224,6 +237,16 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
         {
             return Answer(HttpStatusCode.InternalServerError, $"Unexpected error: {ex.Message}");
         }
+    }
+
+    /// <returns>The HTTP methods the path can be called with. Empty if the path is not a command.</returns>
+    private string[] GetAllowedMethods(string path)
+    {
+        var pathSuffix = " " + path;
+        return _routes.Keys
+            .Where(routeKey => routeKey.EndsWith(pathSuffix, StringComparison.OrdinalIgnoreCase))
+            .Select(routeKey => routeKey.Substring(0, routeKey.Length - pathSuffix.Length))
+            .ToArray();
     }
 
     /// <returns>The body of the request, or null if it has none.</returns>
@@ -580,7 +603,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     {
         if (!_commandInProgress.Wait(0))
         {
-            return Answer(HttpStatusCode.Conflict, "Already processing previous command. New command ignored.");
+            return Answer(HttpStatusCode.Locked, "Already processing previous command. New command ignored.");
         }
 
         try
@@ -594,7 +617,7 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
     }
 
     /// <summary>Passes one command to the session.</summary>
-    /// <returns>Null if the session accepted the command, otherwise the answer saying why it was refused.</returns>
+    /// <returns>Null if the session accepted the command, otherwise the answer saying why it did not.</returns>
     private static RestAnswer TryIssueCommand(string what, Action command)
     {
         try
@@ -602,9 +625,18 @@ public class ExternalRestSessionController : ExternalSessionController, INeedSph
             command();
             return null;
         }
+        catch (InvalidOperationException ex)
+        {
+            // How the session refuses a command that is not valid in its current state
+            return Answer(HttpStatusCode.Conflict, $"Could not start {what}: {ex.Message}");
+        }
+        catch (NotImplementedException ex)
+        {
+            return Answer(HttpStatusCode.NotImplemented, $"The Session does not support {what}: {ex.Message}");
+        }
         catch (Exception ex)
         {
-            return Answer(HttpStatusCode.Conflict, $"Could not start {what}: {ex.Message}");
+            return Answer(HttpStatusCode.InternalServerError, $"Could not start {what}: {ex.Message}");
         }
     }
 

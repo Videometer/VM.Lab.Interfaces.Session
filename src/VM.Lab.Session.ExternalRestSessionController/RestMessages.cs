@@ -5,7 +5,8 @@ namespace VM.Lab.Session.RestSessionController;
 /// <summary>What to send back to the caller</summary>
 /// <param name="StatusCode">HTTP status code</param>
 /// <param name="Body">Object to send as the JSON body</param>
-internal sealed record RestAnswer(HttpStatusCode StatusCode, object Body);
+/// <param name="Allow">Value of the Allow header. Null to leave the header out.</param>
+internal sealed record RestAnswer(HttpStatusCode StatusCode, object Body, string Allow = null);
 
 /// <summary>Body of POST capture</summary>
 /// <param name="Id">ID of the sample</param>
